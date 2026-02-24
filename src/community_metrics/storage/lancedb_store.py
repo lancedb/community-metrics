@@ -182,16 +182,8 @@ class LanceDBStore:
     def seed_metrics(self) -> dict[str, int]:
         table = self._open_table("metrics")
         rows = metric_definition_rows()
-        result = (
-            table.merge_insert("metric_id")
-            .when_matched_update_all()
-            .when_not_matched_insert_all()
-            .execute(rows)
-        )
-        return {
-            "inserted": int(result.num_inserted_rows),
-            "updated": int(result.num_updated_rows),
-        }
+        table.add(rows, mode="overwrite")
+        return {"inserted": len(rows), "updated": 0}
 
     def append_stats(self, rows: list[dict[str, Any]]) -> dict[str, int]:
         if not rows:
@@ -201,52 +193,46 @@ class LanceDBStore:
         table.add(normalized_rows, mode="append")
         return {"inserted": len(normalized_rows), "updated": 0}
 
-    def upsert_stats(self, rows: list[dict[str, Any]]) -> dict[str, int]:
+    def replace_stats(self, rows: list[dict[str, Any]]) -> dict[str, int]:
         if not rows:
             return {"inserted": 0, "updated": 0}
 
         normalized_rows = [self._normalize_stat_row(row) for row in rows]
         table = self._open_table("stats")
-        try:
-            result = (
-                table.merge_insert(["metric_id", "period_end"])
-                .when_matched_update_all()
-                .when_not_matched_insert_all()
-                .execute(normalized_rows)
+
+        metric_windows: dict[str, tuple[str, str]] = {}
+        for row in normalized_rows:
+            metric_id = str(row["metric_id"])
+            day = str(row["period_end"])
+            existing = metric_windows.get(metric_id)
+            if existing is None:
+                metric_windows[metric_id] = (day, day)
+                continue
+            current_min, current_max = existing
+            metric_windows[metric_id] = (min(current_min, day), max(current_max, day))
+
+        for metric_id, (min_day, max_day) in metric_windows.items():
+            metric_id_sql = metric_id.replace("'", "''")
+            predicate = (
+                f"metric_id = '{metric_id_sql}' "
+                f"AND period_end >= '{min_day}' "
+                f"AND period_end <= '{max_day}'"
             )
-            return {
-                "inserted": int(result.num_inserted_rows),
-                "updated": int(result.num_updated_rows),
-            }
-        except NotImplementedError:
-            inserted = 0
-            updated = 0
-            for row in normalized_rows:
-                metric_id = str(row["metric_id"]).replace("'", "''")
-                period_end = str(row["period_end"]).replace("'", "''")
-                predicate = f"metric_id = '{metric_id}' AND period_end = '{period_end}'"
-                exists = int(table.count_rows(filter=predicate)) > 0
-                table.delete(predicate)
-                table.add([row], mode="append")
-                if exists:
-                    updated += 1
-                else:
-                    inserted += 1
-            return {"inserted": inserted, "updated": updated}
+            table.delete(predicate)
+
+        table.add(normalized_rows, mode="append")
+        return {"inserted": len(normalized_rows), "updated": 0}
+
+    def upsert_stats(self, rows: list[dict[str, Any]]) -> dict[str, int]:
+        return self.replace_stats(rows)
 
     def upsert_history(self, row: dict[str, Any]) -> dict[str, int]:
         normalized = self._normalize_history_row(row)
         table = self._open_table("history")
-        result = (
-            table.merge_insert("ingestion_run_id")
-            .when_matched_update_all()
-            .when_not_matched_insert_all()
-            .execute([normalized])
-        )
-        return {
-            "inserted": int(result.num_inserted_rows),
-            "updated": int(result.num_updated_rows),
-        }
+        ingestion_run_id = str(normalized["ingestion_run_id"]).replace("'", "''")
+        table.delete(f"ingestion_run_id = '{ingestion_run_id}'")
+        table.add([normalized], mode="append")
+        return {"inserted": 1, "updated": 0}
 
     def query_table(
         self,

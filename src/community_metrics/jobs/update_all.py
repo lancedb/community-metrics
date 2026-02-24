@@ -243,7 +243,7 @@ def run(
     if reset_tables:
         upsert = store.append_stats(all_rows)
     else:
-        upsert = store.upsert_stats(all_rows)
+        upsert = store.replace_stats(all_rows)
 
     status = "success" if not errors else "partial"
     error_summary = None if not errors else " | ".join(errors)
