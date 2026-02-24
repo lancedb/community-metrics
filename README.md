@@ -68,7 +68,7 @@ Run the first script `bootstrap_tables.py` to create the necessary Lance tables:
 uv run python -m community_metrics.jobs.bootstrap_tables
 ```
 
-This drops the 0`metrics`, `stats`, and `history` tables and recreates schemas, and also seeds metric definitions.
+This drops the `metrics`, `stats`, and `history` tables, recreates schemas, and seeds metric definitions.
 
 ## Routine Refresh
 
@@ -93,6 +93,18 @@ Default scheduling of refresh is set to **09:00 UTC daily**.
 Notes:
 - `update_all` now assumes tables exist by default.
 - Bootstrap prints source request progress to stdout so maintainers can see exactly what is being requested.
+
+## Which Job To Run
+
+| Job | Use this for | Command |
+| --- | --- | --- |
+| `daily_refresh` | Normal daily updates (this runs on a schedule daily) | `uv run python -m community_metrics.jobs.daily_refresh` |
+| `update_all` | Recompute/backfill a full lookback window across all sources | `uv run python -m community_metrics.jobs.update_all --lookback-days 90` |
+| `bootstrap_tables` | Destructive reset/recreate of `metrics`/`stats`/`history` before a rebuild | `uv run python -m community_metrics.jobs.bootstrap_tables` |
+
+Typical rebuild flow:
+1. `uv run python -m community_metrics.jobs.bootstrap_tables`
+2. `uv run python -m community_metrics.jobs.update_all --lookback-days 90`
 
 ## Individual Jobs
 
