@@ -195,6 +195,80 @@ def test_open_table_fallback_create_then_open(monkeypatch) -> None:
     assert store.db.create_calls == 1
 
 
+def test_replace_stats_deletes_metric_windows_before_append() -> None:
+    class _Table:
+        def __init__(self) -> None:
+            self.deletes: list[str] = []
+            self.add_rows: list[dict[str, object]] = []
+
+        def delete(self, predicate: str) -> None:
+            self.deletes.append(predicate)
+
+        def add(self, rows, mode: str = "append") -> None:
+            assert mode == "append"
+            self.add_rows = list(rows)
+
+    class _DB:
+        def __init__(self) -> None:
+            self.table = _Table()
+
+        def open_table(self, _name: str):
+            return self.table
+
+    store = LanceDBStore.__new__(LanceDBStore)
+    store.db = _DB()
+
+    rows = [
+        {
+            "metric_id": "downloads:lance:python",
+            "period_start": "2026-02-10",
+            "period_end": "2026-02-10",
+            "observed_at": "2026-02-10T00:00:00Z",
+            "value": 1,
+            "provenance": "recomputed",
+            "source_window": "1d",
+            "ingestion_run_id": "run-1",
+            "source_ref": "pypi:pylance",
+        },
+        {
+            "metric_id": "downloads:lance:python",
+            "period_start": "2026-02-12",
+            "period_end": "2026-02-12",
+            "observed_at": "2026-02-12T00:00:00Z",
+            "value": 2,
+            "provenance": "recomputed",
+            "source_window": "1d",
+            "ingestion_run_id": "run-1",
+            "source_ref": "pypi:pylance",
+        },
+        {
+            "metric_id": "stars:lance:github",
+            "period_start": "2026-02-11",
+            "period_end": "2026-02-11",
+            "observed_at": "2026-02-11T00:00:00Z",
+            "value": 3,
+            "provenance": "recomputed",
+            "source_window": "cumulative_snapshot",
+            "ingestion_run_id": "run-1",
+            "source_ref": "github-stargazers:lance-format/lance",
+        },
+    ]
+
+    result = store.replace_stats(rows)
+
+    assert result == {"inserted": 3, "updated": 0}
+    assert len(store.db.table.deletes) == 2
+    assert (
+        "metric_id = 'downloads:lance:python' AND period_end >= '2026-02-10' AND period_end <= '2026-02-12'"
+        in store.db.table.deletes
+    )
+    assert (
+        "metric_id = 'stars:lance:github' AND period_end >= '2026-02-11' AND period_end <= '2026-02-11'"
+        in store.db.table.deletes
+    )
+    assert len(store.db.table.add_rows) == 3
+
+
 def test_query_table_uses_query_builder_when_available() -> None:
     class _Builder:
         def where(self, _clause):

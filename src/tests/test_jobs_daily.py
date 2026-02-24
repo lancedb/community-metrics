@@ -250,6 +250,10 @@ def test_update_all_reset_tables_logs_and_writes(monkeypatch, capsys) -> None:
             self.calls.append(("append_stats", len(rows)))
             return {"inserted": len(rows), "updated": 0}
 
+        def replace_stats(self, rows) -> dict[str, int]:
+            self.calls.append(("replace_stats", len(rows)))
+            return {"inserted": len(rows), "updated": 0}
+
         def upsert_stats(self, rows) -> dict[str, int]:
             self.calls.append(("upsert_stats", len(rows)))
             return {"inserted": 0, "updated": 0}
@@ -341,6 +345,10 @@ def test_update_all_defaults_to_assume_tables_exist(monkeypatch, capsys) -> None
             self.calls.append(("append_stats", len(rows)))
             return {"inserted": len(rows), "updated": 0}
 
+        def replace_stats(self, rows) -> dict[str, int]:
+            self.calls.append(("replace_stats", len(rows)))
+            return {"inserted": len(rows), "updated": 0}
+
         def upsert_stats(self, rows) -> dict[str, int]:
             self.calls.append(("upsert_stats", len(rows)))
             return {"inserted": len(rows), "updated": 0}
@@ -370,7 +378,7 @@ def test_update_all_defaults_to_assume_tables_exist(monkeypatch, capsys) -> None
     result = update_all.run(lookback_days=7)
 
     assert result["errors"] == 0
-    assert ("upsert_stats", 0) in fake_store.calls
+    assert ("replace_stats", 0) in fake_store.calls
     assert "upsert_history" in fake_store.calls
     assert "reset_tables" not in fake_store.calls
     assert "create_required_tables" not in fake_store.calls
