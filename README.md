@@ -54,7 +54,7 @@ Daily row semantics in `stats`:
 - download `source_window`: `1d`
 - star `source_window`: `cumulative_snapshot`
 
-## Clean-Slate Bootstrap (Destructive)
+## Clean-Slate Bootstrap
 
 Before running bootstrap, start FastAPI so that the logging commands can pull data from the REST endpoints to display progress:
 
@@ -62,26 +62,13 @@ Before running bootstrap, start FastAPI so that the logging commands can pull da
 uv run uvicorn community_metrics.api.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-This is the one-time bootstrap path for a fresh daily dataset:
+Run the first script `bootstrap_tables.py` to create the necessary Lance tables:
 
 ```bash
-uv run python -m community_metrics.jobs.recompute_history --reset-tables --lookback-days 90
+uv run python -m community_metrics.jobs.bootstrap_tables
 ```
 
-What it does:
-
-1. Drops `metrics`, `stats`, and `history`
-2. Recreates schemas
-3. Seeds metric definitions
-4. Seeds older historical points from `seed_data/` (older than the lookback window)
-5. Backfills daily stats from APIs for the lookback window
-6. Writes run metadata to `history`
-
-Notes:
-
-- `--lookback-days` defaults to `90` when `--reset-tables` is used.
-- Bootstrap prints source request progress to stdout so maintainers can see exactly what is being requested.
-- If bootstrap still fails with transient remote metadata errors, rerun once. Table readiness now retries control-plane lag before failing.
+This drops the 0`metrics`, `stats`, and `history` tables and recreates schemas, and also seeds metric definitions.
 
 ## Routine Refresh
 
@@ -102,6 +89,10 @@ uv run python -m community_metrics.jobs.daily_refresh --lookback-days 7
 ```
 
 Default scheduling of refresh is set to **09:00 UTC daily**.
+
+Notes:
+- `update_all` now assumes tables exist by default.
+- Bootstrap prints source request progress to stdout so maintainers can see exactly what is being requested.
 
 ## Individual Jobs
 

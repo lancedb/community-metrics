@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timezone
 
 from community_metrics.jobs import (
-    recompute_history,
+    update_all,
     update_daily_downloads,
     update_daily_stars,
 )
@@ -224,7 +224,7 @@ def test_update_daily_stars_fallback_marks_partial(monkeypatch) -> None:
     assert "fell back to snapshot" in str(fake_store.history_rows[-1]["error_summary"])
 
 
-def test_recompute_history_reset_tables_logs_and_writes(monkeypatch, capsys) -> None:
+def test_update_all_reset_tables_logs_and_writes(monkeypatch, capsys) -> None:
     class _BootstrapStore:
         def __init__(self) -> None:
             self.calls: list[object] = []
@@ -232,8 +232,11 @@ def test_recompute_history_reset_tables_logs_and_writes(monkeypatch, capsys) -> 
         def reset_tables(self) -> None:
             self.calls.append("reset_tables")
 
-        def create_required_tables(self, on_table=None) -> None:
+        def create_required_tables(
+            self, on_table=None, *, recreate: bool = False
+        ) -> None:
             self.calls.append("create_required_tables")
+            self.calls.append(("create_required_tables.recreate", recreate))
             if on_table is not None:
                 on_table("metrics")
                 on_table("stats")
@@ -256,14 +259,14 @@ def test_recompute_history_reset_tables_logs_and_writes(monkeypatch, capsys) -> 
             return {"inserted": 1, "updated": 0}
 
     fake_store = _BootstrapStore()
-    monkeypatch.setattr(recompute_history, "LanceDBStore", lambda: fake_store)
+    monkeypatch.setattr(update_all, "LanceDBStore", lambda: fake_store)
     monkeypatch.setattr(
-        recompute_history,
+        update_all,
         "latest_completed_day",
         lambda: date(2026, 2, 12),
     )
     monkeypatch.setattr(
-        recompute_history,
+        update_all,
         "_seed_rows_older_than",
         lambda _cutoff, run_id: [
             {
@@ -280,7 +283,7 @@ def test_recompute_history_reset_tables_logs_and_writes(monkeypatch, capsys) -> 
         ],
     )
     monkeypatch.setattr(
-        recompute_history,
+        update_all,
         "_api_rows_for_window",
         lambda **_kwargs: (
             [
@@ -300,13 +303,14 @@ def test_recompute_history_reset_tables_logs_and_writes(monkeypatch, capsys) -> 
         ),
     )
 
-    result = recompute_history.run(reset_tables=True, lookback_days=90)
+    result = update_all.run(reset_tables=True, lookback_days=90)
 
     assert result["errors"] == 0
     assert result["inserted"] == 2
     assert fake_store.calls[0] == "reset_tables"
     assert fake_store.calls[1] == "create_required_tables"
-    assert fake_store.calls[2] == "seed_metrics"
+    assert ("create_required_tables.recreate", True) in fake_store.calls
+    assert "seed_metrics" in fake_store.calls
     assert ("append_stats", 2) in fake_store.calls
     assert "upsert_history" in fake_store.calls
 
@@ -314,3 +318,61 @@ def test_recompute_history_reset_tables_logs_and_writes(monkeypatch, capsys) -> 
     assert "[bootstrap] ensuring table: metrics" in output
     assert "[bootstrap] ensuring table: stats" in output
     assert "[bootstrap] ensuring table: history" in output
+
+
+def test_update_all_defaults_to_assume_tables_exist(monkeypatch, capsys) -> None:
+    class _Store:
+        def __init__(self) -> None:
+            self.calls: list[object] = []
+
+        def reset_tables(self) -> None:
+            self.calls.append("reset_tables")
+
+        def create_required_tables(
+            self, on_table=None, *, recreate: bool = False
+        ) -> None:
+            self.calls.append("create_required_tables")
+
+        def seed_metrics(self) -> dict[str, int]:
+            self.calls.append("seed_metrics")
+            return {"inserted": 0, "updated": 0}
+
+        def append_stats(self, rows) -> dict[str, int]:
+            self.calls.append(("append_stats", len(rows)))
+            return {"inserted": len(rows), "updated": 0}
+
+        def upsert_stats(self, rows) -> dict[str, int]:
+            self.calls.append(("upsert_stats", len(rows)))
+            return {"inserted": len(rows), "updated": 0}
+
+        def upsert_history(self, _row) -> dict[str, int]:
+            self.calls.append("upsert_history")
+            return {"inserted": 1, "updated": 0}
+
+    fake_store = _Store()
+    monkeypatch.setattr(update_all, "LanceDBStore", lambda: fake_store)
+    monkeypatch.setattr(
+        update_all,
+        "latest_completed_day",
+        lambda: date(2026, 2, 12),
+    )
+    monkeypatch.setattr(
+        update_all,
+        "_seed_rows_older_than",
+        lambda _cutoff, _run_id: [],
+    )
+    monkeypatch.setattr(
+        update_all,
+        "_api_rows_for_window",
+        lambda **_kwargs: ([], []),
+    )
+
+    result = update_all.run(lookback_days=7)
+
+    assert result["errors"] == 0
+    assert ("upsert_stats", 0) in fake_store.calls
+    assert "upsert_history" in fake_store.calls
+    assert "reset_tables" not in fake_store.calls
+    assert "create_required_tables" not in fake_store.calls
+    assert "seed_metrics" not in fake_store.calls
+    assert "assuming tables exist" in capsys.readouterr().out

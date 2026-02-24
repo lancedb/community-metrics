@@ -38,18 +38,21 @@ uv run uvicorn community_metrics.api.main:app --host 127.0.0.1 --port 8000 --rel
 ## 4. Bootstrap from clean slate (destructive)
 
 ```bash
-uv run python -m community_metrics.jobs.recompute_history --reset-tables --lookback-days 90
+uv run python -m community_metrics.jobs.bootstrap_tables
+uv run python -m community_metrics.jobs.update_all --lookback-days 90
 ```
 
 What this does:
-- Drops `metrics`, `stats`, `history` if present.
-- Recreates all three tables.
-- Seeds `metrics`.
-- Seeds older historical points from `seed_data/`.
-- Fetches last 90 days from APIs and writes `stats`.
-- Writes one refresh-run record to `history`.
+- `bootstrap_tables`: drops `metrics`, `stats`, `history`; recreates all three tables; seeds `metrics`.
+- `update_all`: assumes tables already exist; seeds older historical points from `seed_data/`, fetches last 90 days from APIs, writes `stats`, and writes one refresh-run record to `history`.
 
-If bootstrap fails with transient remote metadata/control-plane errors, rerun once. The script retries table readiness internally before failing.
+Single-command alternative:
+
+```bash
+uv run python -m community_metrics.jobs.update_all --reset-tables --lookback-days 90
+```
+
+If control-plane metadata is laggy, prefer the two-step flow so table creation and write-heavy recompute are separated.
 
 ## 5. Verify API
 

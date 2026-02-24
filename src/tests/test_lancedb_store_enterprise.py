@@ -60,16 +60,14 @@ def test_store_uses_enterprise_connection_kwargs(monkeypatch) -> None:
     assert captured["region"] == "us-west-2"
 
 
-def test_reset_tables_drops_only_expected_existing_tables() -> None:
+def test_reset_tables_drops_expected_tables_and_ignores_missing() -> None:
     class _DB:
         def __init__(self) -> None:
             self.dropped: list[str] = []
 
-        def table_names(self, limit: int = 1000):
-            assert limit == 1000
-            return ["metrics", "something_else", "history"]
-
         def drop_table(self, name: str):
+            if name == "stats":
+                raise ValueError("Table 'stats' was not found")
             self.dropped.append(name)
 
     store = LanceDBStore.__new__(LanceDBStore)
@@ -80,27 +78,15 @@ def test_reset_tables_drops_only_expected_existing_tables() -> None:
     assert store.db.dropped == ["metrics", "history"]
 
 
-def test_create_required_tables_succeeds_with_stale_table_names() -> None:
-    class _Table:
-        def count_rows(self):
-            return 0
-
+def test_create_required_tables_creates_each_expected_table_once() -> None:
     class _DB:
         def __init__(self) -> None:
             self.create_calls: list[str] = []
-
-        def table_names(self, limit: int = 1000):
-            assert limit == 1000
-            # Simulate stale listing response.
-            return []
 
         def create_table(self, name: str, **kwargs):
             self.create_calls.append(name)
             assert kwargs["mode"] == "exist_ok"
             return object()
-
-        def open_table(self, _name: str):
-            return _Table()
 
     store = LanceDBStore.__new__(LanceDBStore)
     store.db = _DB()
@@ -110,30 +96,38 @@ def test_create_required_tables_succeeds_with_stale_table_names() -> None:
     assert store.db.create_calls == ["metrics", "stats", "history"]
 
 
-def test_create_required_tables_retries_transient_not_found_errors(
+def test_create_required_tables_recreate_uses_overwrite() -> None:
+    class _DB:
+        def __init__(self) -> None:
+            self.modes: list[str] = []
+
+        def create_table(self, _name: str, **kwargs):
+            self.modes.append(str(kwargs["mode"]))
+            return object()
+
+    store = LanceDBStore.__new__(LanceDBStore)
+    store.db = _DB()
+
+    store.create_required_tables(recreate=True)
+
+    assert store.db.modes == ["overwrite", "overwrite", "overwrite"]
+
+
+def test_create_required_tables_retries_transient_create_errors(
     monkeypatch,
 ) -> None:
-    class _Table:
-        def count_rows(self):
-            return 0
-
     class _DB:
         def __init__(self) -> None:
             self.create_calls: list[str] = []
-            self.open_attempts = {"metrics": 0, "stats": 0, "history": 0}
+            self.create_attempts = {"metrics": 0, "stats": 0, "history": 0}
 
         def create_table(self, name: str, **kwargs):
             self.create_calls.append(name)
+            self.create_attempts[name] += 1
             assert kwargs["mode"] == "exist_ok"
+            if name == "metrics" and self.create_attempts[name] < 3:
+                raise RuntimeError("503 Service Temporarily Unavailable")
             return object()
-
-        def open_table(self, name: str):
-            self.open_attempts[name] += 1
-            if name == "metrics" and self.open_attempts[name] < 3:
-                raise RuntimeError(
-                    "404 Not Found: Table not found: community-metrics/metrics.lance/_versions"
-                )
-            return _Table()
 
     monkeypatch.setattr(store_module.time, "sleep", lambda *_args, **_kwargs: None)
     store = LanceDBStore.__new__(LanceDBStore)
@@ -156,13 +150,10 @@ def test_create_required_tables_timeout_includes_table_and_last_error(
 ) -> None:
     class _DB:
         def create_table(self, _name: str, **_kwargs):
-            return object()
-
-        def open_table(self, _name: str):
             raise RuntimeError("503 Service Temporarily Unavailable")
 
     monkeypatch.setattr(store_module.time, "sleep", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(store_module, "CREATE_READY_MAX_ATTEMPTS", 3)
+    monkeypatch.setattr(store_module, "TABLE_READY_MAX_ATTEMPTS", 3)
     store = LanceDBStore.__new__(LanceDBStore)
     store.db = _DB()
 

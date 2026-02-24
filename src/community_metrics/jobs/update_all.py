@@ -184,7 +184,11 @@ def run(
     strict: bool = False,
     lookback_days: int | None = None,
     reset_tables: bool = False,
+    bootstrap_tables: bool = False,
 ) -> dict[str, int]:
+    if reset_tables:
+        bootstrap_tables = True
+
     effective_lookback_days = lookback_days if lookback_days is not None else 90
     if effective_lookback_days <= 0:
         raise ValueError("lookback_days must be > 0")
@@ -192,26 +196,31 @@ def run(
     latest_day = latest_completed_day()
     lookback_start = latest_day - timedelta(days=effective_lookback_days - 1)
 
-    run_ctx = start_run("recompute_history")
+    run_ctx = start_run("update_all")
     store = LanceDBStore()
 
-    if reset_tables:
-        print("[bootstrap] resetting tables: metrics, stats, history", flush=True)
-        store.reset_tables()
+    if bootstrap_tables:
+        if reset_tables:
+            print("[bootstrap] resetting tables: metrics, stats, history", flush=True)
+            store.reset_tables()
 
-    print("[bootstrap] creating required tables", flush=True)
-    store.create_required_tables(
-        on_table=lambda table_name: print(
-            f"[bootstrap] ensuring table: {table_name}", flush=True
+        print("[bootstrap] creating required tables", flush=True)
+        store.create_required_tables(
+            on_table=lambda table_name: print(
+                f"[bootstrap] ensuring table: {table_name}", flush=True
+            ),
+            recreate=reset_tables,
         )
-    )
-
-    metrics_result = store.seed_metrics()
-    print(
-        f"[bootstrap] metrics table written inserted={metrics_result['inserted']} updated={metrics_result['updated']}",
-        flush=True,
-    )
-    print("[bootstrap] history table ready", flush=True)
+        metrics_result = store.seed_metrics()
+        print(
+            f"[bootstrap] metrics table written inserted={metrics_result['inserted']} updated={metrics_result['updated']}",
+            flush=True,
+        )
+        print("[bootstrap] history table ready", flush=True)
+    else:
+        print(
+            "[bootstrap] skipping table bootstrap (assuming tables exist)", flush=True
+        )
 
     all_rows: list[dict[str, object]] = []
 
@@ -260,7 +269,7 @@ def run(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Recompute source-supported historical daily metrics"
+        description="Update all metrics across sources for the requested lookback window"
     )
     parser.add_argument(
         "--strict", action="store_true", help="Fail if any source returns errors"
@@ -284,7 +293,7 @@ def main() -> None:
         reset_tables=args.reset_tables,
     )
     print(
-        "recompute_history complete: "
+        "update_all complete: "
         f"lookback_days={result['lookback_days']} "
         f"inserted={result['inserted']} updated={result['updated']} errors={result['errors']}"
     )
