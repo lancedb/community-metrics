@@ -47,6 +47,9 @@ When making pipeline changes, preserve these behaviors:
    and `cumulative_snapshot` for stars.
 5. Keep `history` focused on refresh-run logging for maintainer troubleshooting (failures/partials), not generalized provenance modeling.
 6. Avoid full-table materialization patterns on Enterprise; use bounded server-side query patterns.
+7. Keep clean-start bootstrap compatible with the two-step flow:
+   `bootstrap_tables` (reset/create/seed metrics) followed by
+   `update_all` (which assumes tables already exist by default).
 
 ## Maintainer Guardrails
 

@@ -25,11 +25,9 @@ TABLE_SCHEMAS = {
     "history": HISTORY_SCHEMA,
 }
 EXPECTED_TABLES = ("metrics", "stats", "history")
-CREATE_READY_TIMEOUT_SECONDS = 30.0
-CREATE_READY_SLEEP_SECONDS = 0.5
-CREATE_READY_MAX_ATTEMPTS = int(
-    CREATE_READY_TIMEOUT_SECONDS / CREATE_READY_SLEEP_SECONDS
-)
+TABLE_READY_TIMEOUT_SECONDS = 30.0
+TABLE_READY_SLEEP_SECONDS = 0.5
+TABLE_READY_MAX_ATTEMPTS = int(TABLE_READY_TIMEOUT_SECONDS / TABLE_READY_SLEEP_SECONDS)
 
 
 # This store intentionally assumes a running LanceDB Enterprise cluster.
@@ -66,30 +64,41 @@ class LanceDBStore:
         return {str(name) for name in self.db.table_names(limit=1000)}
 
     def reset_tables(self) -> None:
-        existing = self.list_tables()
         for table_name in EXPECTED_TABLES:
-            if table_name in existing:
+            try:
                 self.db.drop_table(table_name)
+            except Exception as exc:
+                if self._is_table_not_found_error(exc):
+                    continue
+                if self._is_terminal_table_error(exc):
+                    raise RuntimeError(
+                        f"Terminal error while dropping table '{table_name}': {exc}"
+                    ) from exc
+                raise RuntimeError(
+                    f"Failed to drop table '{table_name}': {exc}"
+                ) from exc
 
     def create_required_tables(
-        self, on_table: Callable[[str], None] | None = None
+        self,
+        on_table: Callable[[str], None] | None = None,
+        *,
+        recreate: bool = False,
     ) -> None:
+        create_mode = "overwrite" if recreate else "exist_ok"
         for table_name in EXPECTED_TABLES:
             if on_table is not None:
                 on_table(table_name)
-            self._create_or_open_ready(table_name)
+            self._create_table_ready(table_name, create_mode=create_mode)
 
     def ensure_tables(self) -> None:
         self.create_required_tables()
 
-    def _create_or_open_ready(self, table_name: str) -> None:
+    def _create_table_ready(self, table_name: str, *, create_mode: str) -> None:
         schema = TABLE_SCHEMAS[table_name]
         last_error: Exception | None = None
-        for _attempt in range(CREATE_READY_MAX_ATTEMPTS):
+        for _attempt in range(TABLE_READY_MAX_ATTEMPTS):
             try:
-                self.db.create_table(table_name, schema=schema, mode="exist_ok")
-                table = self.db.open_table(table_name)
-                table.count_rows()
+                self.db.create_table(table_name, schema=schema, mode=create_mode)
                 return
             except Exception as exc:
                 last_error = exc
@@ -97,10 +106,10 @@ class LanceDBStore:
                     raise RuntimeError(
                         f"Terminal error while ensuring table '{table_name}': {exc}"
                     ) from exc
-                time.sleep(CREATE_READY_SLEEP_SECONDS)
+                time.sleep(TABLE_READY_SLEEP_SECONDS)
         raise RuntimeError(
             f"Timed out ensuring table '{table_name}' after "
-            f"{CREATE_READY_TIMEOUT_SECONDS:.0f}s. Last error: {last_error}"
+            f"{TABLE_READY_TIMEOUT_SECONDS:.0f}s. Last error: {last_error}"
         ) from last_error
 
     @staticmethod
@@ -123,6 +132,7 @@ class LanceDBStore:
             "404",
             "503",
             "table not found",
+            "was not found",
             "_versions",
             "service unavailable",
             "temporarily unavailable",
@@ -133,24 +143,41 @@ class LanceDBStore:
             return False
         return any(token in msg for token in terminal_tokens)
 
+    @staticmethod
+    def _is_table_not_found_error(exc: Exception) -> bool:
+        msg = str(exc).lower()
+        return "not found" in msg or "_versions" in msg
+
     def _open_table(self, table_name: str):
         if table_name not in TABLE_SCHEMAS:
             raise ValueError(f"Unknown table: {table_name}")
-        try:
-            return self.db.open_table(table_name)
-        except Exception as first_error:
-            # Remote metadata can briefly lag behind create_table.
-            self.db.create_table(
-                table_name, schema=TABLE_SCHEMAS[table_name], mode="exist_ok"
-            )
-            time.sleep(CREATE_READY_SLEEP_SECONDS)
+        last_error: Exception | None = None
+        for _attempt in range(TABLE_READY_MAX_ATTEMPTS):
             try:
                 return self.db.open_table(table_name)
-            except Exception as second_error:
-                raise RuntimeError(
-                    f"Failed to open table '{table_name}' after fallback create. "
-                    f"First error: {first_error}; second error: {second_error}"
-                ) from second_error
+            except Exception as open_error:
+                last_error = open_error
+                if self._is_terminal_table_error(open_error):
+                    raise RuntimeError(
+                        f"Terminal error while opening table '{table_name}': {open_error}"
+                    ) from open_error
+                # Remote metadata can briefly lag behind create_table.
+                try:
+                    self.db.create_table(
+                        table_name, schema=TABLE_SCHEMAS[table_name], mode="exist_ok"
+                    )
+                except Exception as create_error:
+                    last_error = create_error
+                    if self._is_terminal_table_error(create_error):
+                        raise RuntimeError(
+                            f"Terminal error while ensuring table '{table_name}' before open: "
+                            f"{create_error}"
+                        ) from create_error
+                time.sleep(TABLE_READY_SLEEP_SECONDS)
+        raise RuntimeError(
+            f"Timed out opening table '{table_name}' after "
+            f"{TABLE_READY_TIMEOUT_SECONDS:.0f}s. Last error: {last_error}"
+        ) from last_error
 
     def seed_metrics(self) -> dict[str, int]:
         table = self._open_table("metrics")
