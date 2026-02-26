@@ -2,6 +2,10 @@
 
 This project always reads/writes a remote LanceDB Enterprise cluster.
 
+Architecture split:
+- Write jobs run from a private machine (for example EC2 + cron).
+- Frontend runs as a Next.js app in `src/dashboard` and serves a read-only dashboard API route.
+
 ## 1. Install deps
 
 ```bash
@@ -26,16 +30,7 @@ Recommended for GitHub rate limits:
 GITHUB_TOKEN=...
 ```
 
-## 3. Start FastAPI locally (run this first)
-
-Start this first and keep it running before bootstrap/refresh scripts.
-
-```bash
-cd /Users/prrao/code/community-metrics
-uv run uvicorn community_metrics.api.main:app --host 127.0.0.1 --port 8000 --reload
-```
-
-## 4. Bootstrap from clean slate (destructive)
+## 3. Bootstrap from clean slate (destructive)
 
 ```bash
 uv run python -m community_metrics.jobs.bootstrap_tables
@@ -44,7 +39,7 @@ uv run python -m community_metrics.jobs.update_all --lookback-days 90
 
 What this does:
 - `bootstrap_tables`: drops `metrics`, `stats`, `history`; recreates all three tables; seeds `metrics`.
-- `update_all`: assumes tables already exist; seeds older historical points from `seed_data/`, fetches last 90 days from APIs, writes `stats`, and writes one refresh-run record to `history`.
+- `update_all`: assumes tables already exist; seeds older historical points from `seed_data/`, fetches recent API windows, writes `stats`, and writes one refresh-run record to `history`.
 
 Single-command alternative:
 
@@ -52,30 +47,7 @@ Single-command alternative:
 uv run python -m community_metrics.jobs.update_all --reset-tables --lookback-days 90
 ```
 
-If control-plane metadata is laggy, prefer the two-step flow so table creation and write-heavy recompute are separated.
-
-## 5. Verify API
-
-```bash
-curl "http://127.0.0.1:8000/api/v1/health"
-curl "http://127.0.0.1:8000/api/v1/dashboard/daily?days=30"
-curl "http://127.0.0.1:8000/api/v1/history/refresh-errors?start_date=2026-01-01&end_date=2026-12-31"
-```
-
-`/api/v1/history/refresh-errors` returns refresh failures/partials in the date range.
-
-## 6. Run frontend locally
-
-```bash
-cd /Users/prrao/code/community-metrics/src/dashboard
-npm run dev
-```
-
-Open `http://127.0.0.1:5173`.
-
-## 7. Routine daily refresh
-
-Keep FastAPI running, then execute refresh:
+## 4. Routine daily refresh
 
 ```bash
 uv run python -m community_metrics.jobs.daily_refresh
@@ -87,11 +59,25 @@ Optional correction window:
 uv run python -m community_metrics.jobs.daily_refresh --lookback-days 7
 ```
 
-## Debug script
+## 5. Run frontend locally
 
-A debug script is provided to run locally (assumes the FastAPI server endpoints are accessible and running).
+```bash
+cd /Users/prrao/code/community-metrics/src/dashboard
+npm run dev
+```
+
+Open `http://127.0.0.1:3000`.
+
+## 6. Verify dashboard API route
+
+```bash
+curl "http://127.0.0.1:3000/api/v1/dashboard/daily?days=30"
+```
+
+## 7. Debug script (direct LanceDB reads)
 
 Usage:
+
 ```bash
 # Metrics table view
 uv run debug.py metrics

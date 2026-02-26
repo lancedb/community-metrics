@@ -9,8 +9,6 @@ description = "LanceDB community metrics dashboard backend and ingestion jobs"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-  "fastapi>=0.115.0",
-  "uvicorn[standard]>=0.30.0",
   "lancedb>=0.25.0",
   "pyarrow>=20.0.0",
   "requests>=2.32.0",

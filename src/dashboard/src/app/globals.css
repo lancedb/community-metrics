@@ -1,0 +1,59 @@
+@import 'react-day-picker/dist/style.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-brand: #f46f52;
+  --color-brand-strong: #e35b3f;
+  --color-brand-soft: #fde2da;
+  --color-canvas: #fff7f3;
+  --color-panel: #fffdfb;
+  --color-ink: #251814;
+  --color-muted: #87675c;
+  --color-edge: #f2c6b9;
+  --color-up: #0f8a4b;
+  --color-up-bg: #d8f5e6;
+  --color-down: #b54733;
+  --color-down-bg: #fde4de;
+}
+
+body {
+  margin: 0;
+  font-family:
+    IBMPlexSans,
+    Satoshi,
+    Manrope,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    'Helvetica Neue',
+    Arial,
+    'Noto Sans',
+    sans-serif;
+  background:
+    radial-gradient(circle at 12% 16%, rgba(244, 111, 82, 0.2), transparent 38%),
+    radial-gradient(circle at 86% 8%, rgba(255, 190, 170, 0.35), transparent 35%),
+    var(--color-canvas);
+  color: var(--color-ink);
+}
+
+.compact-range-picker .rdp-root {
+  --rdp-accent-color: var(--color-brand-strong);
+  --rdp-background-color: var(--color-brand-soft);
+  --rdp-cell-size: 2rem;
+  --rdp-day_button-height: 2rem;
+  --rdp-day_button-width: 2rem;
+}
+
+.compact-range-picker .rdp-month_caption {
+  font-size: 0.85rem;
+}
+
+.compact-range-picker .rdp-weekday {
+  font-size: 0.7rem;
+}

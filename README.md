@@ -1,8 +1,10 @@
 # Community Metrics Dashboard
 
-This repository tracks community metrics for Lance and LanceDB, stores them in LanceDB Enterprise, and serves a frontend dashboard.
+This repository tracks community metrics for Lance and LanceDB, stores them in LanceDB Enterprise, and renders a read-only dashboard frontend.
 
-The pipeline is now run **daily**, with the displayed download metrics summed over the last month.
+Architecture split:
+- **Write path**: Python ingestion jobs run on a private host (for example EC2 + cron).
+- **Read path**: Next.js dashboard app serves `/api/v1/dashboard/daily` and is deployed to Vercel.
 
 ## What This Tracks
 
@@ -22,7 +24,7 @@ The pipeline is now run **daily**, with the displayed download metrics summed ov
 - Frontend managed with `npm`
 - A running **LanceDB Enterprise** cluster
 
-### Environment
+## Environment
 
 Create `.env` in the repo root (or update existing):
 
@@ -31,123 +33,64 @@ LANCEDB_API_KEY=...
 LANCEDB_HOST_OVERRIDE=https://<your-enterprise-host>
 LANCEDB_REGION=us-east-1
 
-# Strongly recommended for maintainers/scheduled runs:
+# Strongly recommended for scheduled ingestion:
 GITHUB_TOKEN=...
 ```
 
-`GITHUB_TOKEN` should stay configured on the machine running scheduled updates. Without it, GitHub stargazer backfills are much more likely to rate-limit.
-Use a personal access token (not a repo-level token). If fine-grained repo selection is restricted by org policy, use the org-approved token path available to maintainers.
+`GITHUB_TOKEN` should stay configured on the machine running scheduled updates.
 
 ## LanceDB Storage
 
 Tables:
-
 - `metrics`: metric definitions
 - `stats`: daily observations keyed by `(metric_id, period_end)`
 - `history`: ingestion run logs
 
 Daily row semantics in `stats`:
-
 - `period_start == period_end`
 - routine provenance: `api_daily`
 - recompute provenance: `recomputed`
 - download `source_window`: `1d`
 - star `source_window`: `cumulative_snapshot`
 
-## Clean-Slate Bootstrap
+## Ingestion Jobs (EC2 / Private Host)
 
-Before running bootstrap, start FastAPI so that the logging commands can pull data from the REST endpoints to display progress:
+All writes happen directly through `LanceDBStore`.
+No FastAPI/uvicorn runtime is required.
 
-```bash
-uv run uvicorn community_metrics.api.main:app --host 127.0.0.1 --port 8000 --reload
-```
-
-Run the first script `bootstrap_tables.py` to create the necessary Lance tables:
+### Clean-Slate Bootstrap
 
 ```bash
 uv run python -m community_metrics.jobs.bootstrap_tables
+uv run python -m community_metrics.jobs.update_all --lookback-days 90
 ```
 
-This drops the `metrics`, `stats`, and `history` tables, recreates schemas, and seeds metric definitions.
-
-## Routine Refresh
-
-The pipeline is designed to run daily on a schedule, or on-demand to refresh data up to a certain date.
-
-The following order of steps must be maintained:
-1. Ensure that you first run the FastAPI server before running refresh jobs.
-2. Run daily refresh script
+### Routine Refresh
 
 ```bash
 uv run python -m community_metrics.jobs.daily_refresh
 ```
 
-For ad-hoc correction of recent data, pick a set number of lookback days:
+For ad-hoc correction windows:
 
 ```bash
 uv run python -m community_metrics.jobs.daily_refresh --lookback-days 7
 ```
 
-Default scheduling of refresh is set to **09:00 UTC daily**.
+### Suggested Cron (EC2)
 
-Notes:
-- `update_all` now assumes tables exist by default.
-- Bootstrap prints source request progress to stdout so maintainers can see exactly what is being requested.
+Run daily at **09:00 UTC**:
 
-## Which Job To Run
-
-| Job | Use this for | Command |
-| --- | --- | --- |
-| `daily_refresh` | Normal daily updates (this runs on a schedule daily) | `uv run python -m community_metrics.jobs.daily_refresh` |
-| `update_all` | Recompute/backfill a full lookback window across all sources | `uv run python -m community_metrics.jobs.update_all --lookback-days 90` |
-| `bootstrap_tables` | Destructive reset/recreate of `metrics`/`stats`/`history` before a rebuild | `uv run python -m community_metrics.jobs.bootstrap_tables` |
-
-Typical rebuild flow:
-1. `uv run python -m community_metrics.jobs.bootstrap_tables`
-2. `uv run python -m community_metrics.jobs.update_all --lookback-days 90`
-
-## Individual Jobs
-
-Ensure the FastAPI server is running first, then run these jobs.
-
-Refresh downloads only:
-
-```bash
-uv run python -m community_metrics.jobs.update_daily_downloads
-uv run python -m community_metrics.jobs.update_daily_downloads --lookback-days 7
+```cron
+0 9 * * * cd /path/to/community-metrics && /usr/bin/env -S bash -lc 'uv run python -m community_metrics.jobs.daily_refresh >> /var/log/community-metrics/daily_refresh.log 2>&1'
 ```
 
-Refresh stars only:
+## Frontend (Next.js + Vercel)
 
-```bash
-uv run python -m community_metrics.jobs.update_daily_stars
-uv run python -m community_metrics.jobs.update_daily_stars --lookback-days 7
-```
-
-Star collection behavior:
-
-- `lookback_days == 0` and one target day: snapshot stars (`/repos/{repo}`)
-- lookback paths: stargazer events (`/repos/{repo}/stargazers`) aggregated by day
-- if stargazer backfill fails: falls back to snapshot and records details in `history.error_summary`
-
-## API
-
-- `GET /api/v1/health`
-- `GET /api/v1/definitions`
-- `GET /api/v1/series/{metric_id}?days=180`
+The dashboard lives in `src/dashboard` and fetches:
 - `GET /api/v1/dashboard/daily?days=180`
-- `GET /api/v1/history/refresh-errors?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD`
 
-Daily response contract uses `days` (not `weeks`).
-
-Defaults:
-
-- `DEFAULT_DAYS = 180`
-- `MAX_DAYS = 730`
-
-## Frontend
-
-Install and run dashboard:
+### Local frontend dev
 
 ```bash
 cd src/dashboard
@@ -155,9 +98,20 @@ npm install
 npm run dev
 ```
 
-The frontend consumes `/api/v1/dashboard/daily`.
+### Vercel env vars
 
-### Frontend Metric Semantics
+Set these in the Vercel project:
+
+```bash
+LANCEDB_API_KEY=...
+LANCEDB_HOST_OVERRIDE=https://<your-enterprise-host>
+LANCEDB_REGION=us-east-1
+```
+
+The route is read-only by code path and only queries bounded dashboard windows.
+If/when available, use a dedicated read-scoped key for Vercel.
+
+### Frontend metric semantics
 
 - Download chart points are monthly totals.
 - Download card headline values are the last full-month totals.
@@ -165,10 +119,24 @@ The frontend consumes `/api/v1/dashboard/daily`.
 - From `2025-12-01` onward, monthly download points are aggregated from daily rows.
 - Star charts remain daily cumulative series.
 
-## API-Only Debug Posture
+## Which Job To Run
 
-For maintainers and debug scripts, query FastAPI endpoints instead of directly reading the remote cluster.
-This keeps access scoped through API contracts and avoids accidental full remote table materialization.
+| Job | Use this for | Command |
+| --- | --- | --- |
+| `daily_refresh` | Normal daily updates (scheduled) | `uv run python -m community_metrics.jobs.daily_refresh` |
+| `update_all` | Recompute/backfill a full lookback window | `uv run python -m community_metrics.jobs.update_all --lookback-days 90` |
+| `bootstrap_tables` | Destructive reset/recreate before rebuild | `uv run python -m community_metrics.jobs.bootstrap_tables` |
+
+## Debug helper
+
+`debug.py` reads LanceDB Enterprise tables directly (no REST API required):
+
+```bash
+uv run debug.py metrics
+uv run debug.py stats --metric-id downloads:lance:python --days 30
+uv run debug.py history --start-date 2026-01-01 --end-date 2026-12-31 --limit 200
+uv run debug.py all
+```
 
 ## Development
 
