@@ -136,6 +136,7 @@ celerybeat.pid
 
 # Environments
 .env
+.env.local
 .envrc
 .venv
 env/
@@ -217,8 +218,11 @@ frontend/node_modules/
 frontend/dist/
 
 # local
+.env.local
 .uv-cache/
 .DS_Store
 src/dashboard/node_modules/
 src/dashboard/dist/
+src/dashboard/.next/
+src/dashboard/tsconfig.tsbuildinfo
 data/community_metrics.lancedb/

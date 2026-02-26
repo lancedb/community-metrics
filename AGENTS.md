@@ -5,7 +5,7 @@
 This repository is a community metrics dashboard that tracks usage & growth statistics for LanceDB,
 a multimodal lakehouse and Lance, the lakehouse format that powers LanceDB.
 
-The backend ingests daily metrics (SDK downloads and GitHub stars), stores them in LanceDB Enterprise tables (`metrics`, `stats`, `history`), serves chart data through FastAPI, and renders an interactive frontend built with Vite + React + Tailwind.
+The backend ingests daily metrics (SDK downloads and GitHub stars), stores them in LanceDB Enterprise tables (`metrics`, `stats`, `history`), and powers a read-only dashboard frontend built with Next.js + React + Tailwind.
 
 This project is remote-only for storage: always use the same LanceDB Enterprise cluster and do not add local LanceDB support.
 

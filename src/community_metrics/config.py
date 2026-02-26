@@ -34,9 +34,6 @@ def _load_env_file(path: Path) -> None:
 
 _load_env_file(ROOT_DIR / ".env")
 
-API_HOST = os.getenv("COMMUNITY_METRICS_API_HOST", "127.0.0.1")
-API_PORT = int(os.getenv("COMMUNITY_METRICS_API_PORT", "8000"))
-
 GITHUB_TOKEN = (os.getenv("GITHUB_TOKEN") or "").strip() or None
 GITHUB_BACKFILL = os.getenv("GITHUB_BACKFILL", "0") == "1"
 
