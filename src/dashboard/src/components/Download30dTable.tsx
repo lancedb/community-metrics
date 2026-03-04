@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react'
-import { DayPicker, type DateRange } from 'react-day-picker'
 import type { DashboardMetric } from '../types'
 
 type Download30dTableProps = {
@@ -24,6 +23,37 @@ function minusDays(base: Date, days: number): Date {
   const out = new Date(base.getTime())
   out.setDate(out.getDate() - days)
   return dateOnlyLocal(out)
+}
+
+function toInputDate(date: Date): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function parseInputDate(value: string): Date | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null
+  const [yearRaw, monthRaw, dayRaw] = value.split('-')
+  const year = Number(yearRaw)
+  const month = Number(monthRaw)
+  const day = Number(dayRaw)
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return null
+  const parsed = new Date(year, month - 1, day)
+  if (
+    parsed.getFullYear() !== year ||
+    parsed.getMonth() !== month - 1 ||
+    parsed.getDate() !== day
+  ) {
+    return null
+  }
+  return dateOnlyLocal(parsed)
+}
+
+function clampDate(value: Date, min: Date, max: Date): Date {
+  if (value < min) return min
+  if (value > max) return max
+  return value
 }
 
 function overlapDays(aStart: Date, aEnd: Date, bStart: Date, bEnd: Date): number {
@@ -52,29 +82,36 @@ function totalForWindow(metrics: DashboardMetric[], windowStart: Date, windowEnd
 export function Download30dTable({ lanceMetrics, lancedbMetrics, maxDaysBack = 90 }: Download30dTableProps) {
   const today = useMemo(() => dateOnlyLocal(new Date()), [])
   const earliestAllowed = useMemo(() => minusDays(today, maxDaysBack), [today, maxDaysBack])
-  const defaultRange = useMemo<DateRange>(() => ({ from: minusDays(today, 30), to: today }), [today])
+  const defaultStart = useMemo(() => minusDays(today, 29), [today])
+  const minInputDate = useMemo(() => toInputDate(earliestAllowed), [earliestAllowed])
+  const maxInputDate = useMemo(() => toInputDate(today), [today])
 
-  const [range, setRange] = useState<DateRange | undefined>(defaultRange)
-  const [pickerOpen, setPickerOpen] = useState(false)
+  const [startDate, setStartDate] = useState<Date>(defaultStart)
+  const [endDate, setEndDate] = useState<Date>(today)
 
-  const onSelectRange = (nextRange: DateRange | undefined) => {
-    setRange(nextRange)
-    if (nextRange?.from && nextRange?.to) {
-      setPickerOpen(false)
-    }
+  const onStartDateChange = (value: string) => {
+    const parsed = parseInputDate(value)
+    if (!parsed) return
+    const nextStart = clampDate(parsed, earliestAllowed, today)
+    setStartDate(nextStart)
+    setEndDate((currentEnd) => (nextStart > currentEnd ? nextStart : currentEnd))
+  }
+
+  const onEndDateChange = (value: string) => {
+    const parsed = parseInputDate(value)
+    if (!parsed) return
+    const nextEnd = clampDate(parsed, earliestAllowed, today)
+    setEndDate(nextEnd)
+    setStartDate((currentStart) => (nextEnd < currentStart ? nextEnd : currentStart))
   }
 
   const windowStart = useMemo(() => {
-    const from = range?.from ?? defaultRange.from ?? today
-    const to = range?.to ?? range?.from ?? defaultRange.to ?? today
-    return from <= to ? dateOnlyLocal(from) : dateOnlyLocal(to)
-  }, [defaultRange.from, defaultRange.to, range, today])
+    return startDate <= endDate ? startDate : endDate
+  }, [endDate, startDate])
 
   const windowEnd = useMemo(() => {
-    const from = range?.from ?? defaultRange.from ?? today
-    const to = range?.to ?? range?.from ?? defaultRange.to ?? today
-    return from <= to ? dateOnlyLocal(to) : dateOnlyLocal(from)
-  }, [defaultRange.from, defaultRange.to, range, today])
+    return startDate <= endDate ? endDate : startDate
+  }, [endDate, startDate])
 
   const lance = useMemo(() => totalForWindow(lanceMetrics, windowStart, windowEnd), [lanceMetrics, windowStart, windowEnd])
   const lancedb = useMemo(
@@ -95,8 +132,8 @@ export function Download30dTable({ lanceMetrics, lancedbMetrics, maxDaysBack = 9
         <button
           type="button"
           onClick={() => {
-            setRange(defaultRange)
-            setPickerOpen(false)
+            setStartDate(defaultStart)
+            setEndDate(today)
           }}
           className="rounded-md border border-edge bg-panel px-3 py-2 text-sm font-semibold text-ink hover:bg-brand-soft"
         >
@@ -104,37 +141,29 @@ export function Download30dTable({ lanceMetrics, lancedbMetrics, maxDaysBack = 9
         </button>
       </header>
 
-      <div className="relative z-30">
-        <button
-          type="button"
-          onClick={() => setPickerOpen((open) => !open)}
-          className="w-full rounded-lg border border-edge bg-brand-soft/35 px-4 py-3 text-left text-sm font-medium text-ink hover:bg-brand-soft"
-        >
-          Date range: {formatWindow(windowStart)} to {formatWindow(windowEnd)}
-        </button>
-        {pickerOpen && (
-          <div className="compact-range-picker absolute left-0 z-[120] mt-2 rounded-lg border border-edge bg-white p-3 shadow-xl">
-            <DayPicker
-              mode="range"
-              selected={range}
-              onSelect={onSelectRange}
-              showOutsideDays
-              startMonth={earliestAllowed}
-              endMonth={today}
-              disabled={{ before: earliestAllowed, after: today }}
-              className="text-xs"
-            />
-            <div className="mt-2 flex justify-end">
-              <button
-                type="button"
-                className="rounded-md border border-edge bg-panel px-2 py-1 text-xs font-semibold text-muted hover:bg-brand-soft"
-                onClick={() => setPickerOpen(false)}
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        )}
+      <div className="flex flex-wrap gap-3">
+        <label className="w-full sm:w-[48%] lg:w-72">
+          <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.14em] text-muted">Start date</span>
+          <input
+            type="date"
+            value={toInputDate(windowStart)}
+            min={minInputDate}
+            max={maxInputDate}
+            onChange={(event) => onStartDateChange(event.target.value)}
+            className="block w-full rounded-lg border border-edge bg-panel px-3 py-2 text-sm text-ink focus:border-brand-strong focus:outline-none"
+          />
+        </label>
+        <label className="w-full sm:w-[48%] lg:w-72">
+          <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.14em] text-muted">End date</span>
+          <input
+            type="date"
+            value={toInputDate(windowEnd)}
+            min={minInputDate}
+            max={maxInputDate}
+            onChange={(event) => onEndDateChange(event.target.value)}
+            className="block w-full rounded-lg border border-edge bg-panel px-3 py-2 text-sm text-ink focus:border-brand-strong focus:outline-none"
+          />
+        </label>
       </div>
 
       <div className="overflow-x-auto">
