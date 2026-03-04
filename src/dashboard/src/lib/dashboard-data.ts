@@ -96,6 +96,19 @@ function shiftDays(day: Date, amount: number): Date {
   return out
 }
 
+function monthStartIso(dayLike: unknown): string {
+  const day = parseIsoDay(dayLike)
+  return `${day.getUTCFullYear()}-${String(day.getUTCMonth() + 1).padStart(2, '0')}-01`
+}
+
+function monthEndIso(dayLike: unknown): string {
+  const monthStart = parseIsoDay(monthStartIso(dayLike))
+  const nextMonthStart = new Date(
+    Date.UTC(monthStart.getUTCFullYear(), monthStart.getUTCMonth() + 1, 1),
+  )
+  return toIsoDay(shiftDays(nextMonthStart, -1))
+}
+
 function sqlQuote(value: string): string {
   return `'${value.replace(/'/g, "''")}'`
 }
@@ -231,20 +244,28 @@ function monthlyDownloadSparkline(rows: Row[], days: number): SparkPoint[] {
 
   const latestDay = parseIsoDay(latest)
   const windowStart = toIsoDay(shiftDays(latestDay, -(days - 1)))
+  const latestMonthStart = monthStartIso(latest)
+  const lastCompletedMonthEnd = toIsoDay(shiftDays(parseIsoDay(latestMonthStart), -1))
 
-  const snapshotByDay = new Map<string, number>()
-  const monthlyBuckets = new Map<string, { period_start: string; period_end: string; value: number }>()
+  const snapshotByMonth = new Map<string, { pointDate: string; sourcePeriodEnd: string; value: number }>()
+  const monthlyBuckets = new Map<string, { pointDate: string; value: number }>()
 
   for (const row of rows) {
     const periodEnd = dayKey(row.period_end)
+    const pointDate = monthEndIso(periodEnd)
     const sourceWindow = String(row.source_window ?? '')
 
     if (
       sourceWindow === 'discrete_snapshot' &&
       periodEnd >= windowStart &&
-      periodEnd <= DOWNLOAD_SNAPSHOT_CUTOFF
+      periodEnd <= DOWNLOAD_SNAPSHOT_CUTOFF &&
+      pointDate <= lastCompletedMonthEnd
     ) {
-      snapshotByDay.set(periodEnd, Math.trunc(coerceNumber(row.value)))
+      const current = snapshotByMonth.get(pointDate)
+      const nextValue = Math.trunc(coerceNumber(row.value))
+      if (!current || periodEnd > current.sourcePeriodEnd) {
+        snapshotByMonth.set(pointDate, { pointDate, sourcePeriodEnd: periodEnd, value: nextValue })
+      }
       continue
     }
 
@@ -252,34 +273,31 @@ function monthlyDownloadSparkline(rows: Row[], days: number): SparkPoint[] {
       sourceWindow === '1d' &&
       periodEnd >= DOWNLOAD_DAILY_START &&
       periodEnd >= windowStart &&
-      periodEnd <= latest
+      periodEnd <= latest &&
+      pointDate <= lastCompletedMonthEnd
     ) {
-      const day = parseIsoDay(periodEnd)
-      const key = `${day.getUTCFullYear()}-${String(day.getUTCMonth() + 1).padStart(2, '0')}`
+      const key = pointDate
       const current = monthlyBuckets.get(key)
       if (!current) {
         monthlyBuckets.set(key, {
-          period_start: periodEnd,
-          period_end: periodEnd,
+          pointDate,
           value: Math.trunc(coerceNumber(row.value)),
         })
       } else {
-        current.period_start = periodEnd < current.period_start ? periodEnd : current.period_start
-        current.period_end = periodEnd > current.period_end ? periodEnd : current.period_end
         current.value += Math.trunc(coerceNumber(row.value))
       }
     }
   }
 
-  const snapshotPoints: SparkPoint[] = [...snapshotByDay.entries()]
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([day, value]) => ({ period_start: day, period_end: day, value }))
+  const snapshotPoints: SparkPoint[] = [...snapshotByMonth.values()]
+    .sort((a, b) => a.pointDate.localeCompare(b.pointDate))
+    .map((bucket) => ({ period_start: bucket.pointDate, period_end: bucket.pointDate, value: bucket.value }))
 
   const monthlyPoints: SparkPoint[] = [...monthlyBuckets.values()]
-    .sort((a, b) => a.period_end.localeCompare(b.period_end))
+    .sort((a, b) => a.pointDate.localeCompare(b.pointDate))
     .map((bucket) => ({
-      period_start: bucket.period_start,
-      period_end: bucket.period_end,
+      period_start: bucket.pointDate,
+      period_end: bucket.pointDate,
       value: bucket.value,
     }))
 
