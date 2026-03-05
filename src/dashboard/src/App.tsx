@@ -40,9 +40,21 @@ export default function App() {
 
     const lanceGroup = data.groups.find((group) => group.product === 'lance')
     const lancedbGroup = data.groups.find((group) => group.product === 'lancedb')
-
-    const lanceStar = lanceGroup?.items.find((item) => item.metric_id === 'stars:lance:github') ?? null
-    const lancedbStar = lancedbGroup?.items.find((item) => item.metric_id === 'stars:lancedb:github') ?? null
+    const starOrder: Record<string, number> = {
+      'stars:lance:github': 0,
+      'stars:lancedb:github': 1,
+      'stars:lance-graph:github': 2,
+      'stars:lance-context:github': 3,
+    }
+    const sortStars = (items: DashboardMetric[]) =>
+      items.sort((a, b) => {
+        const left = starOrder[a.metric_id] ?? 99
+        const right = starOrder[b.metric_id] ?? 99
+        return left - right || a.subject.localeCompare(b.subject)
+      })
+    const starItems = sortStars(
+      data.groups.flatMap((group) => group.items.filter((item) => item.metric_family === 'stars')),
+    )
 
     const totalStarsItem: DashboardMetric | null =
       data.total_stars !== null
@@ -51,7 +63,7 @@ export default function App() {
             display_name: 'Total Stars',
             metric_family: 'stars',
             sdk: null,
-            subject: 'lance-format/lance + lancedb/lancedb',
+            subject: 'Lance and LanceDB family of projects',
             latest_value: data.total_stars,
             latest_period_end: null,
             latest_provenance: 'computed_total',
@@ -59,8 +71,9 @@ export default function App() {
             sparkline: data.total_stars_sparkline,
           }
         : null
-
-    const starItems = [lancedbStar, lanceStar, totalStarsItem].filter((item): item is DashboardMetric => item !== null)
+    if (totalStarsItem) {
+      starItems.push(totalStarsItem)
+    }
 
     const sdkOrder: Record<string, number> = {
       python: 0,
@@ -132,7 +145,7 @@ export default function App() {
             />
             <SectionPanel
               title="Star Histories"
-              subtitle="GitHub stars for Lance, LanceDB, and the combined total."
+              subtitle="GitHub stars for Lance, LanceDB, Lance Graph, Lance Context, and the combined total."
               items={sections.starItems}
             />
           </>

@@ -7,7 +7,12 @@ const DEFAULT_DAYS = 180
 const MAX_DAYS = 730
 const DOWNLOAD_SNAPSHOT_CUTOFF = '2025-11-30'
 const DOWNLOAD_DAILY_START = '2025-12-01'
-const STAR_METRIC_IDS = new Set(['stars:lance:github', 'stars:lancedb:github'])
+const STAR_METRIC_IDS = new Set([
+  'stars:lance:github',
+  'stars:lancedb:github',
+  'stars:lance-graph:github',
+  'stars:lance-context:github',
+])
 
 type Row = Record<string, unknown>
 

@@ -28,11 +28,15 @@ DOWNLOAD_COLUMN_TO_METRIC = {
 STARS_METRIC_SOURCE_MAP = {
     "stars:lance:github": "lance-format/lance",
     "stars:lancedb:github": "lancedb/lancedb",
+    "stars:lance-graph:github": "lance-format/lance-graph",
+    "stars:lance-context:github": "lance-format/lance-context",
 }
 
 REPO_TO_STAR_METRIC = {
     "lance-format/lance": "stars:lance:github",
     "lancedb/lancedb": "stars:lancedb:github",
+    "lance-format/lance-graph": "stars:lance-graph:github",
+    "lance-format/lance-context": "stars:lance-context:github",
 }
 
 
