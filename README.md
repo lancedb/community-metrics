@@ -17,6 +17,8 @@ Architecture split:
 - GitHub stars:
   - `lance-format/lance`
   - `lancedb/lancedb`
+  - `lance-format/lance-graph`
+  - `lance-format/lance-context`
 
 ## Prerequisites
 
@@ -77,6 +79,12 @@ For ad-hoc correction windows:
 uv run python -m community_metrics.jobs.daily_refresh --lookback-days 7
 ```
 
+One-time star-history backfill for newly added GitHub repos:
+
+```bash
+uv run python -m community_metrics.jobs.update_daily_stars --lookback-days 180
+```
+
 ### Suggested Cron (EC2)
 
 Run daily at **09:00 UTC**:
@@ -118,6 +126,7 @@ If/when available, use a dedicated read-scoped key for Vercel.
 - Through `2025-11-30`, download points come from seeded discrete snapshots.
 - From `2025-12-01` onward, monthly download points are aggregated from daily rows.
 - Star charts remain daily cumulative series.
+- Total stars combine all tracked GitHub star repos.
 
 ## Which Job To Run
 

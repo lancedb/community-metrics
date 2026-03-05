@@ -163,6 +163,30 @@ METRIC_DEFINITIONS: list[MetricDefinition] = [
         is_active=True,
         display_name="GitHub Stars",
     ),
+    MetricDefinition(
+        metric_id="stars:lance-graph:github",
+        metric_family="stars",
+        product="lance",
+        subject="lance-format/lance-graph",
+        sdk=None,
+        source="github",
+        value_kind="cumulative_stars",
+        unit="count",
+        is_active=True,
+        display_name="GitHub Stars",
+    ),
+    MetricDefinition(
+        metric_id="stars:lance-context:github",
+        metric_family="stars",
+        product="lance",
+        subject="lance-format/lance-context",
+        sdk=None,
+        source="github",
+        value_kind="cumulative_stars",
+        unit="count",
+        is_active=True,
+        display_name="GitHub Stars",
+    ),
 ]
 
 

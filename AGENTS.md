@@ -50,6 +50,7 @@ When making pipeline changes, preserve these behaviors:
 7. Keep clean-start bootstrap compatible with the two-step flow:
    `bootstrap_tables` (reset/create/seed metrics) followed by
    `update_all` (which assumes tables already exist by default).
+8. Keep total-star aggregation aligned with all active GitHub star metrics in `STARS_METRIC_SOURCE_MAP`.
 
 ## Maintainer Guardrails
 

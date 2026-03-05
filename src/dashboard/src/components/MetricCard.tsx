@@ -10,6 +10,20 @@ function formatNumber(value: number | null): string {
   return Intl.NumberFormat('en-US').format(value)
 }
 
+function starRepoTitle(subject: string): string {
+  const repo = (subject.split('/').at(-1) ?? '').trim().toLowerCase()
+  if (repo === 'lance') return 'Lance'
+  if (repo === 'lancedb') return 'LanceDB'
+  if (repo === 'lance-graph') return 'Lance Graph'
+  if (repo === 'lance-context') return 'Lance Context'
+  if (!repo) return 'GitHub Stars'
+  return repo
+    .split('-')
+    .filter((part) => part.length > 0)
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(' ')
+}
+
 function titleForMetric(metric: DashboardMetric): string {
   if (metric.metric_family === 'downloads') {
     const sdk = (metric.sdk || '').toLowerCase()
@@ -20,7 +34,7 @@ function titleForMetric(metric: DashboardMetric): string {
   }
   if (metric.metric_family === 'stars') {
     if (metric.metric_id === 'stars:total:github') return 'Total Stars'
-    return 'GitHub Stars'
+    return starRepoTitle(metric.subject)
   }
   return metric.display_name
 }
@@ -32,7 +46,7 @@ function subtitleForMetric(metric: DashboardMetric): string {
     if (metric.sdk === 'rust') return `crates.io crate ${metric.subject}`
   }
   if (metric.metric_family === 'stars') {
-    if (metric.metric_id === 'stars:total:github') return 'Combined: lance-format/lance + lancedb/lancedb'
+    if (metric.metric_id === 'stars:total:github') return metric.subject
     return `GitHub repo ${metric.subject}`
   }
   return metric.subject

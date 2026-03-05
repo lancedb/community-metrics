@@ -59,6 +59,12 @@ Optional correction window:
 uv run python -m community_metrics.jobs.daily_refresh --lookback-days 7
 ```
 
+One-time star-history backfill for newly added GitHub repos:
+
+```bash
+uv run python -m community_metrics.jobs.update_daily_stars --lookback-days 180
+```
+
 ## 5. Run frontend locally
 
 ```bash

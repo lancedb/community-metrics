@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timezone
 
 from community_metrics.jobs import (
+    common,
     update_all,
     update_daily_downloads,
     update_daily_stars,
@@ -39,6 +40,25 @@ class _FakeStore:
     def upsert_history(self, row):
         self.history_rows.append(dict(row))
         return {"inserted": 1, "updated": 0}
+
+
+def test_star_metric_mappings_include_new_repos() -> None:
+    assert (
+        common.STARS_METRIC_SOURCE_MAP["stars:lance-graph:github"]
+        == "lance-format/lance-graph"
+    )
+    assert (
+        common.STARS_METRIC_SOURCE_MAP["stars:lance-context:github"]
+        == "lance-format/lance-context"
+    )
+    assert (
+        common.REPO_TO_STAR_METRIC["lance-format/lance-graph"]
+        == "stars:lance-graph:github"
+    )
+    assert (
+        common.REPO_TO_STAR_METRIC["lance-format/lance-context"]
+        == "stars:lance-context:github"
+    )
 
 
 def test_update_daily_downloads_writes_one_row_per_day(monkeypatch) -> None:
@@ -222,6 +242,71 @@ def test_update_daily_stars_fallback_marks_partial(monkeypatch) -> None:
     assert [row["value"] for row in fake_store.upserted_stats_rows] == [77, 77]
     assert fake_store.history_rows[-1]["status"] == "partial"
     assert "fell back to snapshot" in str(fake_store.history_rows[-1]["error_summary"])
+
+
+def test_update_daily_stars_updates_multiple_metrics(monkeypatch) -> None:
+    fake_store = _FakeStore(
+        {
+            "stars:lance:github": [
+                {"metric_id": "stars:lance:github", "period_end": "2026-02-11"}
+            ],
+            "stars:lancedb:github": [
+                {"metric_id": "stars:lancedb:github", "period_end": "2026-02-11"}
+            ],
+            "stars:lance-graph:github": [
+                {"metric_id": "stars:lance-graph:github", "period_end": "2026-02-11"}
+            ],
+            "stars:lance-context:github": [
+                {"metric_id": "stars:lance-context:github", "period_end": "2026-02-11"}
+            ],
+        }
+    )
+    monkeypatch.setattr(update_daily_stars, "build_store", lambda: fake_store)
+    monkeypatch.setattr(
+        update_daily_stars,
+        "STARS_METRIC_SOURCE_MAP",
+        {
+            "stars:lance:github": "lance-format/lance",
+            "stars:lancedb:github": "lancedb/lancedb",
+            "stars:lance-graph:github": "lance-format/lance-graph",
+            "stars:lance-context:github": "lance-format/lance-context",
+        },
+    )
+    monkeypatch.setattr(
+        update_daily_stars, "latest_completed_day", lambda: date(2026, 2, 12)
+    )
+
+    class _GitHub:
+        def get_repo_stars(self, repo):
+            values = {
+                "lance-format/lance": 100,
+                "lancedb/lancedb": 200,
+                "lance-format/lance-graph": 300,
+                "lance-format/lance-context": 400,
+            }
+            return values[repo]
+
+        def iter_stargazer_events(self, _repo):
+            raise AssertionError(
+                "stargazer events should not be used for routine snapshot"
+            )
+
+    monkeypatch.setattr(update_daily_stars, "GitHubClient", _GitHub)
+
+    result = update_daily_stars.run(lookback_days=0)
+
+    assert result == {"inserted": 4, "updated": 0, "errors": 0}
+    assert len(fake_store.upserted_stats_rows) == 4
+    by_metric = {
+        str(row["metric_id"]): int(row["value"])
+        for row in fake_store.upserted_stats_rows
+    }
+    assert by_metric == {
+        "stars:lance:github": 100,
+        "stars:lancedb:github": 200,
+        "stars:lance-graph:github": 300,
+        "stars:lance-context:github": 400,
+    }
 
 
 def test_update_all_reset_tables_logs_and_writes(monkeypatch, capsys) -> None:
