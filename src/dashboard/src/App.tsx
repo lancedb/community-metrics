@@ -127,8 +127,7 @@ export default function App() {
         {data && (
           <>
             <Download30dTable
-              lanceMetrics={sections.lanceDownloads}
-              lancedbMetrics={sections.lancedbDownloads}
+              initialTotals={data.last_30d_download_totals}
               maxDaysBack={90}
             />
             <SectionPanel

@@ -1,9 +1,9 @@
-import { useMemo, useState } from 'react'
-import type { DashboardMetric } from '../types'
+import { useEffect, useMemo, useState } from 'react'
+import { fetchDownloadWindowTotals } from '../api'
+import type { DownloadWindowTotals } from '../types'
 
 type Download30dTableProps = {
-  lanceMetrics: DashboardMetric[]
-  lancedbMetrics: DashboardMetric[]
+  initialTotals: DownloadWindowTotals
   maxDaysBack?: number
 }
 
@@ -50,49 +50,43 @@ function parseInputDate(value: string): Date | null {
   return dateOnlyLocal(parsed)
 }
 
+function parseIsoDate(value: string): Date | null {
+  return parseInputDate(value.slice(0, 10))
+}
+
 function clampDate(value: Date, min: Date, max: Date): Date {
   if (value < min) return min
   if (value > max) return max
   return value
 }
 
-function overlapDays(aStart: Date, aEnd: Date, bStart: Date, bEnd: Date): number {
-  const start = Math.max(aStart.getTime(), bStart.getTime())
-  const end = Math.min(aEnd.getTime(), bEnd.getTime())
-  if (end < start) return 0
-  return Math.floor((end - start) / 86400000) + 1
-}
-
-function totalForWindow(metrics: DashboardMetric[], windowStart: Date, windowEnd: Date): number {
-  let total = 0
-  for (const metric of metrics) {
-    for (const point of metric.sparkline) {
-      const periodStart = new Date(`${point.period_start}T00:00:00`)
-      const periodEnd = new Date(`${point.period_end}T00:00:00`)
-      const days = overlapDays(periodStart, periodEnd, windowStart, windowEnd)
-      if (days <= 0) continue
-      const spanDays = overlapDays(periodStart, periodEnd, periodStart, periodEnd)
-      if (spanDays <= 0) continue
-      total += (point.value * days) / spanDays
-    }
-  }
-  return Math.round(total)
-}
-
-export function Download30dTable({ lanceMetrics, lancedbMetrics, maxDaysBack = 90 }: Download30dTableProps) {
-  const today = useMemo(() => dateOnlyLocal(new Date()), [])
-  const earliestAllowed = useMemo(() => minusDays(today, maxDaysBack), [today, maxDaysBack])
-  const defaultStart = useMemo(() => minusDays(today, 29), [today])
+export function Download30dTable({ initialTotals, maxDaysBack = 90 }: Download30dTableProps) {
+  const maxDate = useMemo(() => {
+    const parsed = parseIsoDate(initialTotals.window_end)
+    return parsed ?? dateOnlyLocal(new Date())
+  }, [initialTotals.window_end])
+  const earliestAllowed = useMemo(() => minusDays(maxDate, maxDaysBack), [maxDate, maxDaysBack])
+  const defaultStart = useMemo(() => {
+    const parsed = parseIsoDate(initialTotals.window_start)
+    return clampDate(parsed ?? minusDays(maxDate, 29), earliestAllowed, maxDate)
+  }, [earliestAllowed, initialTotals.window_start, maxDate])
+  const defaultEnd = useMemo(() => maxDate, [maxDate])
   const minInputDate = useMemo(() => toInputDate(earliestAllowed), [earliestAllowed])
-  const maxInputDate = useMemo(() => toInputDate(today), [today])
+  const maxInputDate = useMemo(() => toInputDate(maxDate), [maxDate])
 
   const [startDate, setStartDate] = useState<Date>(defaultStart)
-  const [endDate, setEndDate] = useState<Date>(today)
+  const [endDate, setEndDate] = useState<Date>(defaultEnd)
+  const [totals, setTotals] = useState(() => ({
+    lance: initialTotals.lance,
+    lancedb: initialTotals.lancedb,
+  }))
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const onStartDateChange = (value: string) => {
     const parsed = parseInputDate(value)
     if (!parsed) return
-    const nextStart = clampDate(parsed, earliestAllowed, today)
+    const nextStart = clampDate(parsed, earliestAllowed, maxDate)
     setStartDate(nextStart)
     setEndDate((currentEnd) => (nextStart > currentEnd ? nextStart : currentEnd))
   }
@@ -100,7 +94,7 @@ export function Download30dTable({ lanceMetrics, lancedbMetrics, maxDaysBack = 9
   const onEndDateChange = (value: string) => {
     const parsed = parseInputDate(value)
     if (!parsed) return
-    const nextEnd = clampDate(parsed, earliestAllowed, today)
+    const nextEnd = clampDate(parsed, earliestAllowed, maxDate)
     setEndDate(nextEnd)
     setStartDate((currentStart) => (nextEnd < currentStart ? nextEnd : currentStart))
   }
@@ -113,11 +107,33 @@ export function Download30dTable({ lanceMetrics, lancedbMetrics, maxDaysBack = 9
     return startDate <= endDate ? endDate : startDate
   }, [endDate, startDate])
 
-  const lance = useMemo(() => totalForWindow(lanceMetrics, windowStart, windowEnd), [lanceMetrics, windowStart, windowEnd])
-  const lancedb = useMemo(
-    () => totalForWindow(lancedbMetrics, windowStart, windowEnd),
-    [lancedbMetrics, windowStart, windowEnd],
-  )
+  useEffect(() => {
+    let cancelled = false
+    const windowStartIso = toInputDate(windowStart)
+    const windowEndIso = toInputDate(windowEnd)
+
+    setIsRefreshing(true)
+    setError(null)
+    fetchDownloadWindowTotals(windowStartIso, windowEndIso)
+      .then((next) => {
+        if (cancelled) return
+        setTotals({ lance: next.lance, lancedb: next.lancedb })
+      })
+      .catch((err) => {
+        if (cancelled) return
+        setError(err instanceof Error ? err.message : 'Could not refresh download totals')
+      })
+      .finally(() => {
+        if (!cancelled) setIsRefreshing(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [windowEnd, windowStart])
+
+  const lance = totals.lance
+  const lancedb = totals.lancedb
   const total = lance + lancedb
 
   return (
@@ -133,7 +149,9 @@ export function Download30dTable({ lanceMetrics, lancedbMetrics, maxDaysBack = 9
           type="button"
           onClick={() => {
             setStartDate(defaultStart)
-            setEndDate(today)
+            setEndDate(defaultEnd)
+            setTotals({ lance: initialTotals.lance, lancedb: initialTotals.lancedb })
+            setError(null)
           }}
           className="rounded-md border border-edge bg-panel px-3 py-2 text-sm font-semibold text-ink hover:bg-brand-soft"
         >
@@ -184,6 +202,8 @@ export function Download30dTable({ lanceMetrics, lancedbMetrics, maxDaysBack = 9
           </tbody>
         </table>
       </div>
+      {isRefreshing && <p className="text-xs text-muted">Refreshing totals...</p>}
+      {error && <p className="text-xs text-down">{error}</p>}
     </section>
   )
 }

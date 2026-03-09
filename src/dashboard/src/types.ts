@@ -23,16 +23,18 @@ export type DashboardGroup = {
   items: DashboardMetric[]
 }
 
+export type DownloadWindowTotals = {
+  window_start: string
+  window_end: string
+  lance: number
+  lancedb: number
+}
+
 export type DashboardResponse = {
   generated_at: string
   days: number
   groups: DashboardGroup[]
   total_stars: number | null
   total_stars_sparkline: SparkPoint[]
-  last_30d_download_totals: {
-    window_start: string
-    window_end: string
-    lance: number
-    lancedb: number
-  }
+  last_30d_download_totals: DownloadWindowTotals
 }

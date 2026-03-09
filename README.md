@@ -97,6 +97,7 @@ Run daily at **09:00 UTC**:
 
 The dashboard lives in `src/dashboard` and fetches:
 - `GET /api/v1/dashboard/daily?days=180`
+- Google SSO (restricted to `@lancedb.com` accounts)
 
 ### Local frontend dev
 
@@ -104,6 +105,21 @@ The dashboard lives in `src/dashboard` and fetches:
 cd src/dashboard
 npm install
 npm run dev
+```
+
+Set these frontend env vars in `src/dashboard/.env.local` (local) or Vercel project settings (deployment):
+
+```bash
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+NEXTAUTH_SECRET=...
+NEXTAUTH_URL=http://127.0.0.1:3000
+```
+
+Google OAuth app setup must include this callback URI:
+
+```bash
+http://127.0.0.1:3000/api/auth/callback/google
 ```
 
 ### Vercel env vars
@@ -114,6 +130,10 @@ Set these in the Vercel project:
 LANCEDB_API_KEY=...
 LANCEDB_HOST_OVERRIDE=https://<your-enterprise-host>
 LANCEDB_REGION=us-east-1
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+NEXTAUTH_SECRET=...
+NEXTAUTH_URL=https://<your-dashboard-domain>
 ```
 
 The route is read-only by code path and only queries bounded dashboard windows.
