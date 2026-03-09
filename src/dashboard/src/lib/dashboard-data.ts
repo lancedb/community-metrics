@@ -1,6 +1,6 @@
 import * as lancedb from '@lancedb/lancedb'
 
-import type { DashboardMetric, DashboardResponse, SparkPoint } from '@/types'
+import type { DashboardMetric, DashboardResponse, DownloadWindowTotals, SparkPoint } from '@/types'
 
 const ENTERPRISE_URI = 'db://community-metrics'
 const DEFAULT_DAYS = 180
@@ -340,10 +340,25 @@ function overlapDays(aStart: string, aEnd: string, bStart: string, bEnd: string)
   return Math.floor((end - start) / 86_400_000) + 1
 }
 
-function last30dDownloadTotals(rows: Row[]): DashboardResponse['last_30d_download_totals'] {
-  const windowEnd = latestCompletedDay()
-  const windowEndIso = toIsoDay(windowEnd)
-  const windowStartIso = toIsoDay(shiftDays(windowEnd, -29))
+function validateIsoDay(value: string, field: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    throw new Error(`Invalid ${field}: expected YYYY-MM-DD`)
+  }
+  if (toIsoDay(parseIsoDay(value)) !== value) {
+    throw new Error(`Invalid ${field}: ${value}`)
+  }
+  return value
+}
+
+function clampIsoDay(value: string, minIso: string, maxIso: string): string {
+  if (value < minIso) return minIso
+  if (value > maxIso) return maxIso
+  return value
+}
+
+function downloadTotalsForWindow(rows: Row[], windowStartIso: string, windowEndIso: string): DownloadWindowTotals {
+  const windowStart = windowStartIso <= windowEndIso ? windowStartIso : windowEndIso
+  const windowEnd = windowStartIso <= windowEndIso ? windowEndIso : windowStartIso
 
   const totals: Record<'lance' | 'lancedb', number> = { lance: 0, lancedb: 0 }
 
@@ -358,7 +373,7 @@ function last30dDownloadTotals(rows: Row[]): DashboardResponse['last_30d_downloa
     const periodStart = String(row.period_start).slice(0, 10)
     const periodEnd = dayKey(row.period_end)
     const normalizedPeriodStart = dayKey(periodStart)
-    const overlap = overlapDays(normalizedPeriodStart, periodEnd, windowStartIso, windowEndIso)
+    const overlap = overlapDays(normalizedPeriodStart, periodEnd, windowStart, windowEnd)
     if (overlap <= 0) continue
     const span = overlapDays(
       normalizedPeriodStart,
@@ -372,11 +387,18 @@ function last30dDownloadTotals(rows: Row[]): DashboardResponse['last_30d_downloa
   }
 
   return {
-    window_start: windowStartIso,
-    window_end: windowEndIso,
+    window_start: windowStart,
+    window_end: windowEnd,
     lance: Math.round(totals.lance),
     lancedb: Math.round(totals.lancedb),
   }
+}
+
+function last30dDownloadTotals(rows: Row[]): DashboardResponse['last_30d_download_totals'] {
+  const windowEnd = latestCompletedDay()
+  const windowEndIso = toIsoDay(windowEnd)
+  const windowStartIso = toIsoDay(shiftDays(windowEnd, -29))
+  return downloadTotalsForWindow(rows, windowStartIso, windowEndIso)
 }
 
 function totalStars(statsRows: Row[], days: number): { total: number | null; sparkline: SparkPoint[] } {
@@ -493,6 +515,64 @@ async function fetchMetricsAndStats(days: number): Promise<{ metricsRows: Metric
   })
 
   return { metricsRows, statsRows, latestDay }
+}
+
+export async function fetchDownloadTotalsForWindow(
+  rawWindowStart: string,
+  rawWindowEnd: string,
+): Promise<DownloadWindowTotals> {
+  const requestedStart = validateIsoDay(String(rawWindowStart ?? '').trim(), 'window_start')
+  const requestedEnd = validateIsoDay(String(rawWindowEnd ?? '').trim(), 'window_end')
+
+  const latestDay = latestCompletedDay()
+  const latestIso = toIsoDay(latestDay)
+  const earliestIso = toIsoDay(shiftDays(latestDay, -(MAX_DAYS - 1)))
+
+  const windowStartIso = clampIsoDay(requestedStart, earliestIso, latestIso)
+  const windowEndIso = clampIsoDay(requestedEnd, earliestIso, latestIso)
+  const normalizedStart = windowStartIso <= windowEndIso ? windowStartIso : windowEndIso
+  const normalizedEnd = windowStartIso <= windowEndIso ? windowEndIso : windowStartIso
+
+  const apiKey = requireEnv('LANCEDB_API_KEY')
+  const hostOverride = requireEnv('LANCEDB_HOST_OVERRIDE')
+  const region = (process.env.LANCEDB_REGION ?? 'us-east-1').trim() || 'us-east-1'
+
+  const db = await lancedb.connect(ENTERPRISE_URI, {
+    apiKey,
+    hostOverride,
+    region,
+  })
+
+  const metricsTable = await db.openTable('metrics')
+  const metricRows = await queryRows(metricsTable, {
+    columns: ['metric_id'],
+    where: "is_active = true AND metric_family = 'downloads'",
+    limit: 100,
+  })
+  const metricIds = metricRows.map((row) => String(row.metric_id ?? '')).filter(Boolean)
+  if (metricIds.length === 0) {
+    return {
+      window_start: normalizedStart,
+      window_end: normalizedEnd,
+      lance: 0,
+      lancedb: 0,
+    }
+  }
+
+  const idsClause = metricIds.map(sqlQuote).join(', ')
+  const where =
+    `metric_id IN (${idsClause}) AND period_end >= ${sqlQuote(normalizedStart)} ` +
+    `AND period_start <= ${sqlQuote(normalizedEnd)}`
+
+  const statsTable = await db.openTable('stats')
+  const rangeDays = overlapDays(normalizedStart, normalizedEnd, normalizedStart, normalizedEnd)
+  const statsRows = await queryRows(statsTable, {
+    columns: ['metric_id', 'period_start', 'period_end', 'value'],
+    where,
+    limit: Math.max(5000, metricIds.length * (rangeDays + 62)),
+  })
+
+  return downloadTotalsForWindow(statsRows, normalizedStart, normalizedEnd)
 }
 
 export async function buildDashboardData(rawDays: number | null | undefined): Promise<DashboardResponse> {

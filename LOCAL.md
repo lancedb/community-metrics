@@ -72,6 +72,21 @@ cd /Users/prrao/code/community-metrics/src/dashboard
 npm run dev
 ```
 
+Add these frontend env vars in `src/dashboard/.env.local`:
+
+```bash
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+NEXTAUTH_SECRET=...
+NEXTAUTH_URL=http://127.0.0.1:3000
+```
+
+In Google Cloud Console, configure this OAuth callback URL:
+
+```bash
+http://127.0.0.1:3000/api/auth/callback/google
+```
+
 Open `http://127.0.0.1:3000`.
 
 ## 6. Verify dashboard API route
