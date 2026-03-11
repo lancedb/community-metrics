@@ -1,11 +1,18 @@
+import { getServerSession } from 'next-auth'
 import { NextRequest, NextResponse } from 'next/server'
 
+import { authOptions, isAllowedLanceDbEmail } from '@/lib/auth'
 import { buildDashboardData, fetchDownloadTotalsForWindow } from '@/lib/dashboard-data'
 
 export const runtime = 'nodejs'
 
 export async function GET(request: NextRequest) {
   try {
+    const session = await getServerSession(authOptions)
+    if (!isAllowedLanceDbEmail(session?.user?.email)) {
+      return NextResponse.json({ detail: 'Unauthorized' }, { status: 401 })
+    }
+
     const responseMode = request.nextUrl.searchParams.get('response')
     if (responseMode === 'download_window_totals') {
       const windowStart = request.nextUrl.searchParams.get('window_start')
