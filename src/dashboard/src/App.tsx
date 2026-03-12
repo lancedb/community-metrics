@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { signOut } from 'next-auth/react'
 import { fetchDashboard } from './api'
 import { Download30dTable } from './components/Download30dTable'
 import { SectionPanel } from './components/SectionPanel'
@@ -103,7 +104,16 @@ export default function App() {
         style={{ background: 'linear-gradient(90deg, #e4d8f8 0%, #F0B7C1 45%, #E55A2B 100%)' }}
       >
         <div className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-8">
-          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-[#4f3042]">DevRel Dashboard</p>
+          <div className="flex items-center justify-between gap-4">
+            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-[#4f3042]">DevRel Dashboard</p>
+            <button
+              type="button"
+              className="rounded-md border border-[#7f4b5b] bg-white/60 px-3 py-1.5 text-xs font-semibold tracking-wide text-[#4f3042] transition hover:bg-white/85"
+              onClick={() => signOut({ callbackUrl: '/signin' })}
+            >
+              Sign out
+            </button>
+          </div>
           <h1 className="mt-1 text-3xl font-extrabold tracking-tight text-[#2d1a14] sm:text-4xl">
             LanceDB Community Metrics
           </h1>
