@@ -109,7 +109,9 @@ def run(*, run_id: str | None = None, lookback_days: int = 0) -> dict[str, int]:
                     )
 
         except Exception as exc:
-            errors.append(f"{metric_id}: {exc}")
+            error_message = f"{metric_id}: {exc}"
+            print(f"[update_daily_downloads] error: {error_message}", flush=True)
+            errors.append(error_message)
 
     upsert = store.upsert_stats(rows)
     status = "success" if not errors else "partial"

@@ -67,9 +67,11 @@ def run(*, run_id: str | None = None, lookback_days: int = 0) -> dict[str, int]:
                     snapshot = github.get_repo_stars(repo)
                     totals = {day: snapshot for day in target_days}
                     source_ref = f"github:{repo}"
-                    errors.append(
+                    error_message = (
                         f"{metric_id}: stargazer backfill failed ({exc}); fell back to snapshot"
                     )
+                    print(f"[update_daily_stars] warning: {error_message}", flush=True)
+                    errors.append(error_message)
 
             observed_at = datetime.now(tz=timezone.utc)
             for day in target_days:
@@ -86,7 +88,9 @@ def run(*, run_id: str | None = None, lookback_days: int = 0) -> dict[str, int]:
                     )
                 )
         except Exception as exc:
-            errors.append(f"{metric_id}: {exc}")
+            error_message = f"{metric_id}: {exc}"
+            print(f"[update_daily_stars] error: {error_message}", flush=True)
+            errors.append(error_message)
 
     upsert = store.upsert_stats(rows)
     status = "success" if not errors else "partial"
