@@ -113,6 +113,46 @@ def test_update_daily_downloads_writes_one_row_per_day(monkeypatch) -> None:
     assert fake_store.history_rows[-1]["status"] == "success"
 
 
+def test_update_daily_downloads_logs_metric_errors(monkeypatch, capsys) -> None:
+    fake_store = _FakeStore()
+    monkeypatch.setattr(update_daily_downloads, "build_store", lambda: fake_store)
+    monkeypatch.setattr(
+        update_daily_downloads,
+        "DOWNLOAD_METRIC_SOURCE_MAP",
+        {
+            "downloads:lance:python": ("pypi", "pylance"),
+        },
+    )
+    monkeypatch.setattr(
+        update_daily_downloads,
+        "latest_completed_day",
+        lambda: date(2026, 2, 12),
+    )
+
+    class _PyPI:
+        def fetch_daily_downloads(self, package):
+            assert package == "pylance"
+            raise RuntimeError("429 Too Many Requests")
+
+    class _Npm:
+        def fetch_daily_downloads(self, package, start, end):
+            raise AssertionError("npm client should not be used")
+
+    class _Crates:
+        def fetch_daily_downloads(self, crate_name):
+            raise AssertionError("crates client should not be used")
+
+    monkeypatch.setattr(update_daily_downloads, "PyPIStatsClient", _PyPI)
+    monkeypatch.setattr(update_daily_downloads, "NpmDownloadsClient", _Npm)
+    monkeypatch.setattr(update_daily_downloads, "CratesClient", _Crates)
+
+    result = update_daily_downloads.run(lookback_days=1)
+
+    assert result == {"inserted": 0, "updated": 0, "errors": 1}
+    assert "downloads:lance:python: 429 Too Many Requests" in capsys.readouterr().out
+    assert fake_store.history_rows[-1]["status"] == "partial"
+
+
 def test_update_daily_stars_uses_snapshot_for_routine_run(monkeypatch) -> None:
     fake_store = _FakeStore(
         {
@@ -242,6 +282,44 @@ def test_update_daily_stars_fallback_marks_partial(monkeypatch) -> None:
     assert [row["value"] for row in fake_store.upserted_stats_rows] == [77, 77]
     assert fake_store.history_rows[-1]["status"] == "partial"
     assert "fell back to snapshot" in str(fake_store.history_rows[-1]["error_summary"])
+
+
+def test_update_daily_stars_logs_fallback_warning(monkeypatch, capsys) -> None:
+    fake_store = _FakeStore(
+        {
+            "stars:lance:github": [
+                {
+                    "metric_id": "stars:lance:github",
+                    "period_end": "2026-02-12",
+                }
+            ]
+        }
+    )
+    monkeypatch.setattr(update_daily_stars, "build_store", lambda: fake_store)
+    monkeypatch.setattr(
+        update_daily_stars,
+        "STARS_METRIC_SOURCE_MAP",
+        {"stars:lance:github": "lance-format/lance"},
+    )
+    monkeypatch.setattr(
+        update_daily_stars, "latest_completed_day", lambda: date(2026, 2, 12)
+    )
+
+    class _GitHub:
+        def get_repo_stars(self, repo):
+            return 77
+
+        def iter_stargazer_events(self, repo):
+            raise RuntimeError("rate limit")
+
+    monkeypatch.setattr(update_daily_stars, "GitHubClient", _GitHub)
+
+    update_daily_stars.run(lookback_days=2)
+
+    assert (
+        "stars:lance:github: stargazer backfill failed (rate limit); fell back to snapshot"
+        in capsys.readouterr().out
+    )
 
 
 def test_update_daily_stars_updates_multiple_metrics(monkeypatch) -> None:
