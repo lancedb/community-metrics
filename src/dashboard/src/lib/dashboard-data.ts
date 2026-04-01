@@ -249,8 +249,10 @@ function monthlyDownloadSparkline(rows: Row[], days: number): SparkPoint[] {
 
   const latestDay = parseIsoDay(latest)
   const windowStart = toIsoDay(shiftDays(latestDay, -(days - 1)))
-  const latestMonthStart = monthStartIso(latest)
-  const lastCompletedMonthEnd = toIsoDay(shiftDays(parseIsoDay(latestMonthStart), -1))
+  // Use today's date to determine the last completed month, not the latest data date
+  const today = new Date()
+  const thisMonthStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1))
+  const lastCompletedMonthEnd = toIsoDay(shiftDays(thisMonthStart, -1))
 
   const snapshotByMonth = new Map<string, { pointDate: string; sourcePeriodEnd: string; value: number }>()
   const monthlyBuckets = new Map<string, { pointDate: string; value: number }>()
