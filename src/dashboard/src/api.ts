@@ -1,6 +1,6 @@
 import type { DashboardResponse, DownloadWindowTotals } from './types'
 
-export async function fetchDashboard(days = 180): Promise<DashboardResponse> {
+export async function fetchDashboard(days = 730): Promise<DashboardResponse> {
   const response = await fetch(`/api/v1/dashboard/daily?days=${days}`)
   if (!response.ok) {
     throw new Error(`Failed to load dashboard: ${response.status}`)

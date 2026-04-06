@@ -13,7 +13,7 @@ export default function App() {
 
   useEffect(() => {
     let cancelled = false
-    fetchDashboard(180)
+    fetchDashboard()
       .then((result) => {
         if (!cancelled) setData(result)
       })

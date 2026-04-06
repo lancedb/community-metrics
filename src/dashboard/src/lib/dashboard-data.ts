@@ -3,10 +3,11 @@ import * as lancedb from '@lancedb/lancedb'
 import type { DashboardMetric, DashboardResponse, DownloadWindowTotals, SparkPoint } from '@/types'
 
 const ENTERPRISE_URI = 'db://community-metrics'
-const DEFAULT_DAYS = 180
+const DEFAULT_DAYS = 730
 const MAX_DAYS = 730
 const DOWNLOAD_SNAPSHOT_CUTOFF = '2025-11-30'
 const DOWNLOAD_DAILY_START = '2025-12-01'
+const SYNTHETIC_NOVEMBER_2025 = '2025-11-30'
 const STAR_METRIC_IDS = new Set([
   'stars:lance:github',
   'stars:lancedb:github',
@@ -308,7 +309,23 @@ function monthlyDownloadSparkline(rows: Row[], days: number): SparkPoint[] {
       value: bucket.value,
     }))
 
-  return [...snapshotPoints, ...monthlyPoints].sort((a, b) => a.period_end.localeCompare(b.period_end))
+  const points = [...snapshotPoints, ...monthlyPoints].sort((a, b) => a.period_end.localeCompare(b.period_end))
+
+  if (points.some((point) => point.period_end === SYNTHETIC_NOVEMBER_2025)) {
+    return points
+  }
+
+  const october = points.find((point) => point.period_end === '2025-10-31')
+  const december = points.find((point) => point.period_end === '2025-12-31')
+  if (!october || !december) {
+    return points
+  }
+
+  return [...points, {
+    period_start: SYNTHETIC_NOVEMBER_2025,
+    period_end: SYNTHETIC_NOVEMBER_2025,
+    value: Math.round((october.value + december.value) / 2),
+  }].sort((a, b) => a.period_end.localeCompare(b.period_end))
 }
 
 function lastFullMonthValue(points: SparkPoint[], referenceDay: Date): { value: number | null; period_end: string | null } {
