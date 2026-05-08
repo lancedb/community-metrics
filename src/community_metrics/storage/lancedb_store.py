@@ -13,8 +13,12 @@ from community_metrics.config import (
     LANCEDB_REGION,
 )
 from community_metrics.models import (
+    EVIDENCE_ITEMS_SCHEMA,
     HISTORY_SCHEMA,
     METRICS_SCHEMA,
+    ROLLUP_SCHEMA,
+    SIGNAL_CANDIDATES_SCHEMA,
+    SIGNAL_GUIDANCE_SCHEMA,
     STATS_SCHEMA,
     metric_definition_rows,
 )
@@ -23,8 +27,18 @@ TABLE_SCHEMAS = {
     "metrics": METRICS_SCHEMA,
     "stats": STATS_SCHEMA,
     "history": HISTORY_SCHEMA,
+    "dashboard_metric_rollups": ROLLUP_SCHEMA,
+    "evidence_items": EVIDENCE_ITEMS_SCHEMA,
+    "signal_candidates": SIGNAL_CANDIDATES_SCHEMA,
+    "signal_guidance": SIGNAL_GUIDANCE_SCHEMA,
 }
 EXPECTED_TABLES = ("metrics", "stats", "history")
+DERIVED_TABLES = (
+    "dashboard_metric_rollups",
+    "evidence_items",
+    "signal_candidates",
+    "signal_guidance",
+)
 TABLE_READY_TIMEOUT_SECONDS = 30.0
 TABLE_READY_SLEEP_SECONDS = 0.5
 TABLE_READY_MAX_ATTEMPTS = int(TABLE_READY_TIMEOUT_SECONDS / TABLE_READY_SLEEP_SECONDS)
@@ -92,6 +106,36 @@ class LanceDBStore:
 
     def ensure_tables(self) -> None:
         self.create_required_tables()
+
+    def create_derived_tables(
+        self,
+        on_table: Callable[[str], None] | None = None,
+        *,
+        recreate: bool = False,
+    ) -> None:
+        create_mode = "overwrite" if recreate else "exist_ok"
+        for table_name in DERIVED_TABLES:
+            if on_table is not None:
+                on_table(table_name)
+            self._create_table_ready(table_name, create_mode=create_mode)
+
+    def ensure_derived_tables(self) -> None:
+        self.create_derived_tables()
+
+    def reset_derived_tables(self) -> None:
+        for table_name in DERIVED_TABLES:
+            try:
+                self.db.drop_table(table_name)
+            except Exception as exc:
+                if self._is_table_not_found_error(exc):
+                    continue
+                if self._is_terminal_table_error(exc):
+                    raise RuntimeError(
+                        f"Terminal error while dropping table '{table_name}': {exc}"
+                    ) from exc
+                raise RuntimeError(
+                    f"Failed to drop table '{table_name}': {exc}"
+                ) from exc
 
     def _create_table_ready(self, table_name: str, *, create_mode: str) -> None:
         schema = TABLE_SCHEMAS[table_name]
@@ -234,6 +278,48 @@ class LanceDBStore:
         table.add([normalized], mode="append")
         return {"inserted": 1, "updated": 0}
 
+    def replace_dashboard_rollups(self, rows: list[dict[str, Any]]) -> dict[str, int]:
+        normalized = [self._normalize_rollup_row(row) for row in rows]
+        if not normalized:
+            self._create_table_ready(
+                "dashboard_metric_rollups", create_mode="overwrite"
+            )
+            return {"inserted": 0, "updated": 0}
+        table = self._open_table("dashboard_metric_rollups")
+        table.add(normalized, mode="overwrite")
+        return {"inserted": len(normalized), "updated": 0}
+
+    def replace_signal_candidates(self, rows: list[dict[str, Any]]) -> dict[str, int]:
+        normalized = [self._normalize_signal_row(row) for row in rows]
+        if not normalized:
+            self._create_table_ready("signal_candidates", create_mode="overwrite")
+            return {"inserted": 0, "updated": 0}
+        table = self._open_table("signal_candidates")
+        table.add(normalized, mode="overwrite")
+        return {"inserted": len(normalized), "updated": 0}
+
+    def upsert_evidence_items(self, rows: list[dict[str, Any]]) -> dict[str, int]:
+        if not rows:
+            return {"inserted": 0, "updated": 0}
+        normalized = [self._normalize_evidence_row(row) for row in rows]
+        table = self._open_table("evidence_items")
+        for row in normalized:
+            evidence_id = str(row["evidence_id"]).replace("'", "''")
+            table.delete(f"evidence_id = '{evidence_id}'")
+        table.add(normalized, mode="append")
+        return {"inserted": len(normalized), "updated": 0}
+
+    def upsert_signal_guidance(self, rows: list[dict[str, Any]]) -> dict[str, int]:
+        if not rows:
+            return {"inserted": 0, "updated": 0}
+        normalized = [self._normalize_guidance_row(row) for row in rows]
+        table = self._open_table("signal_guidance")
+        for row in normalized:
+            guidance_id = str(row["guidance_id"]).replace("'", "''")
+            table.delete(f"guidance_id = '{guidance_id}'")
+        table.add(normalized, mode="append")
+        return {"inserted": len(normalized), "updated": 0}
+
     def query_table(
         self,
         table_name: str,
@@ -344,6 +430,112 @@ class LanceDBStore:
         normalized["rows_updated"] = int(normalized.get("rows_updated", 0))
         normalized["error_summary"] = normalized.get("error_summary")
         return normalized
+
+    @staticmethod
+    def _normalize_rollup_row(row: dict[str, Any]) -> dict[str, Any]:
+        normalized = dict(row)
+        normalized["current_value"] = int(normalized.get("current_value", 0))
+        normalized["previous_value"] = int(normalized.get("previous_value", 0))
+        normalized["delta"] = int(normalized.get("delta", 0))
+        for key in (
+            "percent_change",
+            "sdk_share",
+            "previous_sdk_share",
+            "sdk_share_delta",
+            "trend_slope",
+        ):
+            normalized[key] = float(normalized.get(key) or 0.0)
+        normalized["updated_at"] = LanceDBStore._normalize_timestamp(
+            normalized.get("updated_at")
+        )
+        return normalized
+
+    @staticmethod
+    def _normalize_evidence_row(row: dict[str, Any]) -> dict[str, Any]:
+        normalized = dict(row)
+        normalized["observed_at"] = LanceDBStore._normalize_timestamp(
+            normalized.get("observed_at")
+        )
+        normalized["occurred_at"] = LanceDBStore._normalize_timestamp(
+            normalized.get("occurred_at")
+        )
+        for key in (
+            "matched_terms",
+            "related_metrics",
+            "related_packages",
+            "related_repos",
+            "communities",
+        ):
+            value = normalized.get(key) or []
+            normalized[key] = [str(item) for item in value]
+        for key in (
+            "source_type",
+            "source_name",
+            "title",
+            "url",
+            "snippet",
+            "evidence_strength",
+            "raw_ref",
+        ):
+            normalized[key] = str(normalized.get(key) or "")
+        return normalized
+
+    @staticmethod
+    def _normalize_signal_row(row: dict[str, Any]) -> dict[str, Any]:
+        normalized = dict(row)
+        normalized["detected_at"] = LanceDBStore._normalize_timestamp(
+            normalized.get("detected_at")
+        )
+        for key in ("related_metrics", "evidence_ids"):
+            value = normalized.get(key) or []
+            normalized[key] = [str(item) for item in value]
+        normalized["score"] = float(normalized.get("score") or 0.0)
+        for key in (
+            "signal_type",
+            "window_start",
+            "window_end",
+            "title",
+            "summary",
+            "confidence",
+            "suggested_action",
+        ):
+            normalized[key] = str(normalized.get(key) or "")
+        return normalized
+
+    @staticmethod
+    def _normalize_guidance_row(row: dict[str, Any]) -> dict[str, Any]:
+        normalized = dict(row)
+        normalized["generated_at"] = LanceDBStore._normalize_timestamp(
+            normalized.get("generated_at")
+        )
+        for key in ("comparison_windows", "recommended_next_steps"):
+            value = normalized.get(key) or []
+            normalized[key] = [str(item) for item in value]
+        for key in (
+            "guidance_id",
+            "signal_id",
+            "model",
+            "reasoning_effort",
+            "prompt_version",
+            "analysis_window_start",
+            "analysis_window_end",
+            "executive_summary",
+            "movement_assessment",
+            "why_it_matters",
+            "likely_community",
+            "engineering_relevance",
+            "confidence",
+            "citations",
+            "raw_response",
+        ):
+            normalized[key] = str(normalized.get(key) or "")
+        return normalized
+
+    @staticmethod
+    def _normalize_timestamp(value: Any) -> datetime:
+        if value is None:
+            return datetime.now(tz=timezone.utc)
+        return LanceDBStore._coerce_datetime(value)
 
     @staticmethod
     def _coerce_date(value: Any) -> date:

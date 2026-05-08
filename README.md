@@ -37,9 +37,13 @@ LANCEDB_REGION=us-east-1
 
 # Strongly recommended for scheduled ingestion:
 GITHUB_TOKEN=...
+
+# Required only for weekly LLM guidance generation:
+OPENAI_API_KEY=...
 ```
 
 `GITHUB_TOKEN` should stay configured on the machine running scheduled updates.
+`OPENAI_API_KEY` is only used by `generate_signal_guidance`; dashboard requests do not call OpenAI.
 
 ## LanceDB Storage
 
@@ -47,6 +51,13 @@ Tables:
 - `metrics`: metric definitions
 - `stats`: daily observations keyed by `(metric_id, period_end)`
 - `history`: ingestion run logs
+- `dashboard_metric_rollups`: derived dashboard windows and growth comparisons
+- `evidence_items`: derived/manual community evidence such as Hacker News mentions
+- `signal_candidates`: derived DevRel signal candidates generated from rollups and evidence
+- `signal_guidance`: weekly cached LLM guidance generated from signals, rollups, and evidence
+
+`metrics`, `stats`, and `history` are the source-of-truth tables. The dashboard-derived
+tables can be recreated from source data and external evidence collectors.
 
 Daily row semantics in `stats`:
 - `period_start == period_end`
@@ -83,6 +94,13 @@ One-time star-history backfill for newly added GitHub repos:
 
 ```bash
 uv run python -m community_metrics.jobs.update_daily_stars --lookback-days 180
+```
+
+One-time download snapshot backfill for older month-end history:
+
+```bash
+uv run python one_time_snapshot_backfill.py
+uv run python one_time_snapshot_backfill.py --apply
 ```
 
 ### Suggested Cron (EC2)
@@ -143,10 +161,75 @@ If/when available, use a dedicated read-scoped key for Vercel.
 
 - Download chart points are monthly totals.
 - Download card headline values are the last full-month totals.
+- The dashboard now fetches 730 days of history by default so seeded monthly snapshots remain visible.
 - Through `2025-11-30`, download points come from seeded discrete snapshots.
+- If the live table is missing a `2025-11-30` snapshot row, the dashboard synthesizes that month from the arithmetic mean of the October 2025 and December 2025 monthly values.
 - From `2025-12-01` onward, monthly download points are aggregated from daily rows.
 - Star charts remain daily cumulative series.
 - Total stars combine all tracked GitHub star repos.
+- The Action Cockpit reads precomputed `signal_candidates`, `dashboard_metric_rollups`, `evidence_items`, and `signal_guidance`.
+- HN evidence uses `occurred_at` as the filter/order field for "most recent mentions" UI.
+- LLM guidance is cached in `signal_guidance`; the dashboard never calls OpenAI during page load.
+
+### Derived Dashboard Data
+
+Derived jobs keep dashboard reads small and avoid recomputing expensive windows at request time:
+
+```bash
+uv run python -m community_metrics.jobs.collect_hn_evidence --lookback-days 30
+uv run python -m community_metrics.jobs.derive_dashboard
+```
+
+What is precomputed:
+- `dashboard_metric_rollups`: 7d, 15d, 30d, 90d, and last-full-month values; prior-window values; deltas; percent changes; SDK share; SDK share deltas; recent trend slope.
+- `signal_candidates`: deterministic `download_spike`, `sustained_growth`, `sdk_share_shift`, and `social_mention_burst` signals for DevRel review.
+- `evidence_items`: HN/manual evidence with `occurred_at`, `snippet`, matched terms, related metrics/packages, communities, and strength.
+- `signal_guidance`: weekly OpenAI-generated DevRel guidance with citations to concrete signal, rollup, and evidence IDs.
+
+First-time setup or backfill for the Action Cockpit:
+
+```bash
+# 1. Ensure source tables are current.
+uv run python -m community_metrics.jobs.daily_refresh --lookback-days 30
+
+# 2. Backfill recent HN evidence. Use a wider window if you want more initial context.
+uv run python -m community_metrics.jobs.collect_hn_evidence --lookback-days 365
+
+# 3. Build derived rollups and deterministic signal candidates.
+uv run python -m community_metrics.jobs.derive_dashboard
+
+# 4. Generate cached LLM guidance for the latest weekly signal window.
+uv run python -m community_metrics.jobs.generate_signal_guidance --window-days 7
+```
+
+Normal weekly LLM guidance cadence:
+
+```bash
+uv run python -m community_metrics.jobs.daily_refresh --lookback-days 7
+uv run python -m community_metrics.jobs.collect_hn_evidence --lookback-days 30
+uv run python -m community_metrics.jobs.derive_dashboard
+uv run python -m community_metrics.jobs.generate_signal_guidance --window-days 7
+```
+
+`generate_signal_guidance` uses the latest 7d rollups as the primary assessment window, compares against 15d and 30d rollups, includes detailed 7d evidence, and sends bounded 15d/30d evidence summaries. Defaults:
+- `COMMUNITY_METRICS_OPENAI_MODEL=gpt-5.5`
+- `COMMUNITY_METRICS_OPENAI_REASONING_EFFORT=high`
+- `COMMUNITY_METRICS_GUIDANCE_PROMPT_VERSION=v1`
+- `COMMUNITY_METRICS_OPENAI_TIMEOUT_SECONDS=600`
+
+The guidance job requires `OPENAI_API_KEY`. It writes to `signal_guidance` and may be safely rerun for the same weekly window; rows are upserted by guidance ID. The dashboard will show "guidance pending" for any signal that does not yet have a matching guidance row.
+
+HN collector search terms:
+- `LanceDB`
+- `lancedb`
+- `@lancedb/lancedb`
+- `lance format`
+- `lance file format`
+- `memory-lancedb`
+- `memory-lancedb-pro`
+- `OpenClaw lancedb`
+
+Reddit/F5bot and GitHub downstream dependency automation are intentionally deferred. Reddit/F5bot evidence can start as manual `evidence_items`; future GitHub dependency evidence should only count exact dependencies found in package manifests or lockfiles.
 
 ## Which Job To Run
 
@@ -155,6 +238,9 @@ If/when available, use a dedicated read-scoped key for Vercel.
 | `daily_refresh` | Normal daily updates (scheduled) | `uv run python -m community_metrics.jobs.daily_refresh` |
 | `update_all` | Recompute/backfill a full lookback window | `uv run python -m community_metrics.jobs.update_all --lookback-days 90` |
 | `bootstrap_tables` | Destructive reset/recreate before rebuild | `uv run python -m community_metrics.jobs.bootstrap_tables` |
+| `collect_hn_evidence` | Collect recent Hacker News evidence into derived evidence table | `uv run python -m community_metrics.jobs.collect_hn_evidence --lookback-days 30` |
+| `derive_dashboard` | Recompute dashboard rollups and signal candidates | `uv run python -m community_metrics.jobs.derive_dashboard` |
+| `generate_signal_guidance` | Generate weekly cached LLM guidance for the Action Cockpit | `uv run python -m community_metrics.jobs.generate_signal_guidance --window-days 7` |
 
 ## Debug helper
 
