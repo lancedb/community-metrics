@@ -2,9 +2,13 @@ import { redirect } from 'next/navigation'
 import { getServerSession } from 'next-auth'
 
 import App from '@/App'
-import { authOptions, isAllowedLanceDbEmail } from '@/lib/auth'
+import { authOptions, isAllowedLanceDbEmail, isLocalAuthDisabled } from '@/lib/auth'
 
 export default async function Page() {
+  if (isLocalAuthDisabled()) {
+    return <App />
+  }
+
   const session = await getServerSession(authOptions)
   if (!isAllowedLanceDbEmail(session?.user?.email)) {
     redirect('/signin')

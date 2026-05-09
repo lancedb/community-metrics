@@ -137,12 +137,6 @@ export default function App() {
 
         {data && (
           <>
-            <ActionCockpit
-              signals={data.signal_candidates}
-              guidance={data.signal_guidance}
-              rollups={data.metric_rollups}
-              evidence={data.recent_evidence}
-            />
             <Download30dTable
               initialTotals={data.last_30d_download_totals}
               maxDaysBack={90}
@@ -163,6 +157,12 @@ export default function App() {
               title="Star Histories"
               subtitle="GitHub stars for Lance, LanceDB, Lance Graph, Lance Context, and the combined total."
               items={sections.starItems}
+            />
+            <ActionCockpit
+              signals={data.signal_candidates}
+              guidance={data.signal_guidance}
+              rollups={data.metric_rollups}
+              evidence={data.recent_evidence}
             />
           </>
         )}
