@@ -1,8 +1,9 @@
+import { NextResponse } from 'next/server'
 import { withAuth } from 'next-auth/middleware'
 
-import { isAllowedLanceDbEmail } from '@/lib/auth'
+import { isAllowedLanceDbEmail, isLocalAuthDisabled } from '@/lib/auth-policy'
 
-export default withAuth({
+const authMiddleware = withAuth({
   pages: {
     signIn: '/signin',
   },
@@ -10,6 +11,14 @@ export default withAuth({
     authorized: ({ token }) => isAllowedLanceDbEmail(token?.email),
   },
 })
+
+export default function middleware(...args: Parameters<typeof authMiddleware>) {
+  if (isLocalAuthDisabled()) {
+    return NextResponse.next()
+  }
+
+  return authMiddleware(...args)
+}
 
 export const config = {
   matcher: ['/((?!api/auth|_next/static|_next/image|favicon.ico|signin).*)'],

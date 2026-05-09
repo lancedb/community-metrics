@@ -1,16 +1,14 @@
 import type { NextAuthOptions } from 'next-auth'
 import GoogleProvider from 'next-auth/providers/google'
 
-export const ALLOWED_EMAIL_DOMAIN = 'lancedb.com'
+import { ALLOWED_EMAIL_DOMAIN, isAllowedLanceDbEmail, isLocalAuthDisabled } from './auth-policy'
+
+export { ALLOWED_EMAIL_DOMAIN, isAllowedLanceDbEmail, isLocalAuthDisabled }
 
 type GoogleProfile = {
   email?: string
   email_verified?: boolean
   hd?: string
-}
-
-export function isAllowedLanceDbEmail(email: string | null | undefined): boolean {
-  return typeof email === 'string' && email.toLowerCase().endsWith(`@${ALLOWED_EMAIL_DOMAIN}`)
 }
 
 export const authOptions: NextAuthOptions = {

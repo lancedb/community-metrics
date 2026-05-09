@@ -106,6 +106,10 @@ export function ActionCockpit({ signals, guidance, rollups, evidence }: ActionCo
               const signalGuidance = guidanceForSignal(signal, guidance)
               const signalRollups = rollupsForSignal(signal, rollups)
               const signalEvidence = evidenceForSignal(signal, evidence, signalGuidance)
+              const nextSteps = signalGuidance?.recommended_next_steps.filter((step) => step.trim().length > 0) ?? []
+              const citedFacts = signalGuidance?.citations
+                .filter((citation) => citation.fact.trim().length > 0)
+                .slice(0, 3) ?? []
               return (
                 <article key={signal.signal_id} className="rounded-xl border border-edge bg-panel p-4 shadow-card">
                   <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">
@@ -133,32 +137,36 @@ export function ActionCockpit({ signals, guidance, rollups, evidence }: ActionCo
                     ))}
                   </div>
 
-                  {signalGuidance ? (
+                  {signalGuidance && (nextSteps.length > 0 || citedFacts.length > 0) ? (
                     <div className="mt-3 grid gap-3 lg:grid-cols-2">
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">Next Steps</p>
-                        <ul className="mt-1 space-y-1 text-sm text-ink">
-                          {signalGuidance.recommended_next_steps.map((step) => (
-                            <li key={step}>{step}</li>
-                          ))}
-                        </ul>
-                      </div>
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">Cited Facts</p>
-                        <ul className="mt-1 space-y-1 text-sm text-muted">
-                          {signalGuidance.citations.slice(0, 3).map((citation) => (
-                            <li key={`${citation.source_type}:${citation.source_id}:${citation.fact}`}>
-                              {citation.fact}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
+                      {nextSteps.length > 0 && (
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">Next Steps</p>
+                          <ul className="mt-1 space-y-1 text-sm text-ink">
+                            {nextSteps.map((step) => (
+                              <li key={step}>{step}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {citedFacts.length > 0 && (
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">Cited Facts</p>
+                          <ul className="mt-1 space-y-1 text-sm text-muted">
+                            {citedFacts.map((citation) => (
+                              <li key={`${citation.source_type}:${citation.source_id}:${citation.fact}`}>
+                                {citation.fact}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
                     </div>
-                  ) : (
+                  ) : !signalGuidance ? (
                     <p className="mt-3 rounded-lg border border-edge bg-white/70 p-3 text-sm text-muted">
                       LLM guidance has not been generated for this weekly signal yet.
                     </p>
-                  )}
+                  ) : null}
 
                   {signalEvidence.length > 0 && (
                     <div className="mt-3 border-t border-edge pt-3">
@@ -206,18 +214,6 @@ export function ActionCockpit({ signals, guidance, rollups, evidence }: ActionCo
             </div>
           </div>
 
-          <div className="rounded-xl border border-edge bg-panel p-4">
-            <h3 className="text-base font-bold text-ink">Recent Evidence</h3>
-            <div className="mt-3 space-y-2">
-              {evidence.slice(0, 6).map((item) => (
-                <a key={item.evidence_id} href={item.url} target="_blank" rel="noreferrer" className="block rounded-lg bg-white/70 p-3 hover:text-brand-strong">
-                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">{formatDate(item.occurred_at)} · {item.evidence_strength}</p>
-                  <p className="mt-1 text-sm font-semibold text-ink">{item.title}</p>
-                </a>
-              ))}
-              {evidence.length === 0 && <p className="text-sm text-muted">No recent evidence has been collected yet.</p>}
-            </div>
-          </div>
         </aside>
       </div>
     </section>

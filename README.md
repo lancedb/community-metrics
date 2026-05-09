@@ -134,6 +134,15 @@ NEXTAUTH_SECRET=...
 NEXTAUTH_URL=http://127.0.0.1:3000
 ```
 
+For local dashboard testing only, Google auth can be bypassed:
+
+```bash
+DISABLE_AUTH_LOCAL=1
+```
+
+This flag is only honored when Next.js runs with `NODE_ENV=development`; production builds still require Google SSO.
+Restart `npm run dev` after changing `.env.local` because Next.js reads these values at server startup.
+
 Google OAuth app setup must include this callback URI:
 
 ```bash

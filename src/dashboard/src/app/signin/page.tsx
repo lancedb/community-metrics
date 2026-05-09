@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
+import { redirect } from 'next/navigation'
 
-import { ALLOWED_EMAIL_DOMAIN } from '@/lib/auth'
+import { ALLOWED_EMAIL_DOMAIN, isLocalAuthDisabled } from '@/lib/auth-policy'
 
 import { SignInButton } from './SignInButton'
 
@@ -21,6 +22,10 @@ export const metadata: Metadata = {
 }
 
 export default async function SignInPage({ searchParams }: SignInPageProps) {
+  if (isLocalAuthDisabled()) {
+    redirect('/')
+  }
+
   const params = (await searchParams) ?? {}
   const callbackUrlValue = params.callbackUrl
   const callbackUrl = typeof callbackUrlValue === 'string' ? callbackUrlValue : '/'
