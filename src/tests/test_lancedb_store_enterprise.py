@@ -96,6 +96,29 @@ def test_create_required_tables_creates_each_expected_table_once() -> None:
     assert store.db.create_calls == ["metrics", "stats", "history"]
 
 
+def test_create_derived_tables_creates_only_derived_tables() -> None:
+    class _DB:
+        def __init__(self) -> None:
+            self.create_calls: list[str] = []
+
+        def create_table(self, name: str, **kwargs):
+            self.create_calls.append(name)
+            assert kwargs["mode"] == "exist_ok"
+            return object()
+
+    store = LanceDBStore.__new__(LanceDBStore)
+    store.db = _DB()
+
+    store.create_derived_tables()
+
+    assert store.db.create_calls == [
+        "dashboard_metric_rollups",
+        "evidence_items",
+        "signal_candidates",
+        "signal_guidance",
+    ]
+
+
 def test_create_required_tables_recreate_uses_overwrite() -> None:
     class _DB:
         def __init__(self) -> None:

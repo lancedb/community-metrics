@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { signOut } from 'next-auth/react'
 import { fetchDashboard } from './api'
+import { ActionCockpit } from './components/ActionCockpit'
 import { Download30dTable } from './components/Download30dTable'
 import { SectionPanel } from './components/SectionPanel'
 import type { DashboardMetric, DashboardResponse } from './types'
@@ -136,6 +137,12 @@ export default function App() {
 
         {data && (
           <>
+            <ActionCockpit
+              signals={data.signal_candidates}
+              guidance={data.signal_guidance}
+              rollups={data.metric_rollups}
+              evidence={data.recent_evidence}
+            />
             <Download30dTable
               initialTotals={data.last_30d_download_totals}
               maxDaysBack={90}

@@ -36,6 +36,17 @@ _load_env_file(ROOT_DIR / ".env")
 
 GITHUB_TOKEN = (os.getenv("GITHUB_TOKEN") or "").strip() or None
 GITHUB_BACKFILL = os.getenv("GITHUB_BACKFILL", "0") == "1"
+OPENAI_API_KEY = (os.getenv("OPENAI_API_KEY") or "").strip()
+OPENAI_MODEL = (os.getenv("COMMUNITY_METRICS_OPENAI_MODEL") or "gpt-5.5").strip()
+OPENAI_REASONING_EFFORT = (
+    os.getenv("COMMUNITY_METRICS_OPENAI_REASONING_EFFORT") or "high"
+).strip()
+OPENAI_GUIDANCE_PROMPT_VERSION = (
+    os.getenv("COMMUNITY_METRICS_GUIDANCE_PROMPT_VERSION") or "v1"
+).strip()
+OPENAI_TIMEOUT_SECONDS = int(
+    os.getenv("COMMUNITY_METRICS_OPENAI_TIMEOUT_SECONDS", "600")
+)
 
 LANCEDB_API_KEY = (os.getenv("LANCEDB_API_KEY") or "").strip()
 LANCEDB_HOST_OVERRIDE = (os.getenv("LANCEDB_HOST_OVERRIDE") or "").strip()

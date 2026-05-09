@@ -37,3 +37,7 @@ def test_load_env_file_does_not_override_existing_env(
     config._load_env_file(env_file)
 
     assert os.getenv("GITHUB_TOKEN") == "from-shell"
+
+
+def test_openai_timeout_default_is_long_enough_for_guidance() -> None:
+    assert config.OPENAI_TIMEOUT_SECONDS >= 300

@@ -1,6 +1,16 @@
 import * as lancedb from '@lancedb/lancedb'
 
-import type { DashboardMetric, DashboardResponse, DownloadWindowTotals, SparkPoint } from '@/types'
+import type {
+  DashboardEvidenceItem,
+  DashboardGuidanceCitation,
+  DashboardMetric,
+  DashboardMetricRollup,
+  DashboardResponse,
+  DashboardSignalCandidate,
+  DashboardSignalGuidance,
+  DownloadWindowTotals,
+  SparkPoint,
+} from '@/types'
 
 const ENTERPRISE_URI = 'db://community-metrics'
 const DEFAULT_DAYS = 730
@@ -161,6 +171,73 @@ function coerceNumber(value: unknown): number {
     return Number.isFinite(parsed) ? parsed : 0
   }
   return 0
+}
+
+function coerceList(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item)).filter(Boolean)
+  }
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>
+    if (Array.isArray(record.values)) {
+      return record.values.map((item) => String(item)).filter(Boolean)
+    }
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (!trimmed) return []
+    if (trimmed.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(trimmed)
+        return Array.isArray(parsed) ? parsed.map((item) => String(item)).filter(Boolean) : []
+      } catch {
+        return [trimmed]
+      }
+    }
+    return [trimmed]
+  }
+  return []
+}
+
+function coerceIsoDateTime(value: unknown): string {
+  if (value instanceof Date) {
+    return value.toISOString()
+  }
+  if (value !== null && typeof value === 'object') {
+    const candidate = value as { valueOf?: () => unknown }
+    if (typeof candidate.valueOf === 'function') {
+      const primitive = candidate.valueOf()
+      if (primitive !== value) {
+        return coerceIsoDateTime(primitive)
+      }
+    }
+  }
+  const parsed = new Date(String(value ?? ''))
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toISOString()
+  }
+  return String(value ?? '')
+}
+
+function coerceCitations(value: unknown): DashboardGuidanceCitation[] {
+  let parsed: unknown
+  try {
+    parsed = typeof value === 'string' ? JSON.parse(value || '[]') : value
+  } catch {
+    return []
+  }
+  if (!Array.isArray(parsed)) return []
+  return parsed
+    .map((item) => {
+      const record = item as Record<string, unknown>
+      return {
+        source_type: String(record.source_type ?? ''),
+        source_id: String(record.source_id ?? ''),
+        fact: String(record.fact ?? ''),
+        used_for: String(record.used_for ?? ''),
+      }
+    })
+    .filter((item) => item.source_id && item.fact)
 }
 
 function rowsByMetric(rows: Row[]): Map<string, Row[]> {
@@ -479,6 +556,19 @@ async function queryRows(table: any, options: { where?: string; columns?: string
   return rows as Row[]
 }
 
+async function queryOptionalTable(
+  db: any,
+  tableName: string,
+  options: { where?: string; columns?: string[]; limit?: number },
+): Promise<Row[]> {
+  try {
+    const table = await db.openTable(tableName)
+    return await queryRows(table, options)
+  } catch {
+    return []
+  }
+}
+
 async function fetchMetricsAndStats(days: number): Promise<{ metricsRows: MetricDef[]; statsRows: Row[]; latestDay: Date }> {
   const apiKey = requireEnv('LANCEDB_API_KEY')
   const hostOverride = requireEnv('LANCEDB_HOST_OVERRIDE')
@@ -534,6 +624,207 @@ async function fetchMetricsAndStats(days: number): Promise<{ metricsRows: Metric
   })
 
   return { metricsRows, statsRows, latestDay }
+}
+
+async function fetchDerivedDashboardData(): Promise<{
+  metricRollups: DashboardMetricRollup[]
+  recentEvidence: DashboardEvidenceItem[]
+  signalCandidates: DashboardSignalCandidate[]
+  signalGuidance: DashboardSignalGuidance[]
+}> {
+  const apiKey = requireEnv('LANCEDB_API_KEY')
+  const hostOverride = requireEnv('LANCEDB_HOST_OVERRIDE')
+  const region = (process.env.LANCEDB_REGION ?? 'us-east-1').trim() || 'us-east-1'
+
+  const db = await lancedb.connect(ENTERPRISE_URI, {
+    apiKey,
+    hostOverride,
+    region,
+  })
+
+  const rollupRows = await queryOptionalTable(db, 'dashboard_metric_rollups', {
+    columns: [
+      'rollup_id',
+      'metric_id',
+      'metric_family',
+      'product',
+      'sdk',
+      'subject',
+      'window',
+      'window_start',
+      'window_end',
+      'current_value',
+      'previous_value',
+      'delta',
+      'percent_change',
+      'sdk_share',
+      'previous_sdk_share',
+      'sdk_share_delta',
+      'trend_slope',
+      'updated_at',
+    ],
+    limit: 500,
+  })
+
+  const evidenceRows = await queryOptionalTable(db, 'evidence_items', {
+    columns: [
+      'evidence_id',
+      'source_type',
+      'source_name',
+      'observed_at',
+      'occurred_at',
+      'title',
+      'url',
+      'snippet',
+      'matched_terms',
+      'related_metrics',
+      'related_packages',
+      'related_repos',
+      'communities',
+      'evidence_strength',
+    ],
+    limit: 200,
+  })
+
+  const signalRows = await queryOptionalTable(db, 'signal_candidates', {
+    columns: [
+      'signal_id',
+      'signal_type',
+      'detected_at',
+      'window_start',
+      'window_end',
+      'title',
+      'summary',
+      'related_metrics',
+      'evidence_ids',
+      'score',
+      'confidence',
+      'suggested_action',
+    ],
+    limit: 100,
+  })
+
+  const guidanceRows = await queryOptionalTable(db, 'signal_guidance', {
+    columns: [
+      'guidance_id',
+      'signal_id',
+      'generated_at',
+      'model',
+      'reasoning_effort',
+      'prompt_version',
+      'analysis_window_start',
+      'analysis_window_end',
+      'comparison_windows',
+      'executive_summary',
+      'movement_assessment',
+      'why_it_matters',
+      'likely_community',
+      'recommended_next_steps',
+      'engineering_relevance',
+      'confidence',
+      'citations',
+    ],
+    limit: 100,
+  })
+
+  const windowPriority: Record<string, number> = {
+    '7d': 0,
+    '15d': 1,
+    '30d': 2,
+    '90d': 3,
+    last_full_month: 4,
+  }
+
+  const metricRollups = rollupRows
+    .map((row) => ({
+      rollup_id: String(row.rollup_id ?? ''),
+      metric_id: String(row.metric_id ?? ''),
+      metric_family: String(row.metric_family ?? ''),
+      product: String(row.product ?? ''),
+      sdk: String(row.sdk ?? ''),
+      subject: String(row.subject ?? ''),
+      window: String(row.window ?? ''),
+      window_start: String(row.window_start ?? ''),
+      window_end: String(row.window_end ?? ''),
+      current_value: coerceNumber(row.current_value),
+      previous_value: coerceNumber(row.previous_value),
+      delta: coerceNumber(row.delta),
+      percent_change: coerceNumber(row.percent_change),
+      sdk_share: coerceNumber(row.sdk_share),
+      previous_sdk_share: coerceNumber(row.previous_sdk_share),
+      sdk_share_delta: coerceNumber(row.sdk_share_delta),
+      trend_slope: coerceNumber(row.trend_slope),
+      updated_at: coerceIsoDateTime(row.updated_at),
+    }))
+    .sort((a, b) => {
+      const windowDiff = (windowPriority[a.window] ?? 99) - (windowPriority[b.window] ?? 99)
+      if (windowDiff !== 0) return windowDiff
+      return Math.abs(b.percent_change) - Math.abs(a.percent_change)
+    })
+    .slice(0, 80)
+
+  const recentEvidence = evidenceRows
+    .map((row) => ({
+      evidence_id: String(row.evidence_id ?? ''),
+      source_type: String(row.source_type ?? ''),
+      source_name: String(row.source_name ?? ''),
+      observed_at: coerceIsoDateTime(row.observed_at),
+      occurred_at: coerceIsoDateTime(row.occurred_at),
+      title: String(row.title ?? ''),
+      url: String(row.url ?? ''),
+      snippet: String(row.snippet ?? ''),
+      matched_terms: coerceList(row.matched_terms),
+      related_metrics: coerceList(row.related_metrics),
+      related_packages: coerceList(row.related_packages),
+      related_repos: coerceList(row.related_repos),
+      communities: coerceList(row.communities),
+      evidence_strength: String(row.evidence_strength ?? ''),
+    }))
+    .sort((a, b) => b.occurred_at.localeCompare(a.occurred_at))
+    .slice(0, 8)
+
+  const signalCandidates = signalRows
+    .map((row) => ({
+      signal_id: String(row.signal_id ?? ''),
+      signal_type: String(row.signal_type ?? ''),
+      detected_at: coerceIsoDateTime(row.detected_at),
+      window_start: String(row.window_start ?? ''),
+      window_end: String(row.window_end ?? ''),
+      title: String(row.title ?? ''),
+      summary: String(row.summary ?? ''),
+      related_metrics: coerceList(row.related_metrics),
+      evidence_ids: coerceList(row.evidence_ids),
+      score: coerceNumber(row.score),
+      confidence: String(row.confidence ?? ''),
+      suggested_action: String(row.suggested_action ?? ''),
+    }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 8)
+
+  const signalGuidance = guidanceRows
+    .map((row) => ({
+      guidance_id: String(row.guidance_id ?? ''),
+      signal_id: String(row.signal_id ?? ''),
+      generated_at: coerceIsoDateTime(row.generated_at),
+      model: String(row.model ?? ''),
+      reasoning_effort: String(row.reasoning_effort ?? ''),
+      prompt_version: String(row.prompt_version ?? ''),
+      analysis_window_start: String(row.analysis_window_start ?? ''),
+      analysis_window_end: String(row.analysis_window_end ?? ''),
+      comparison_windows: coerceList(row.comparison_windows),
+      executive_summary: String(row.executive_summary ?? ''),
+      movement_assessment: String(row.movement_assessment ?? ''),
+      why_it_matters: String(row.why_it_matters ?? ''),
+      likely_community: String(row.likely_community ?? ''),
+      recommended_next_steps: coerceList(row.recommended_next_steps),
+      engineering_relevance: String(row.engineering_relevance ?? ''),
+      confidence: String(row.confidence ?? ''),
+      citations: coerceCitations(row.citations),
+    }))
+    .sort((a, b) => b.generated_at.localeCompare(a.generated_at))
+    .slice(0, 20)
+
+  return { metricRollups, recentEvidence, signalCandidates, signalGuidance }
 }
 
 export async function fetchDownloadTotalsForWindow(
@@ -611,6 +902,10 @@ export async function buildDashboardData(rawDays: number | null | undefined): Pr
         lance: 0,
         lancedb: 0,
       },
+      metric_rollups: [],
+      recent_evidence: [],
+      signal_candidates: [],
+      signal_guidance: [],
     }
   }
 
@@ -691,6 +986,8 @@ export async function buildDashboardData(rawDays: number | null | undefined): Pr
     }
   }
 
+  const derived = await fetchDerivedDashboardData()
+
   return {
     generated_at: new Date().toISOString(),
     days,
@@ -698,5 +995,9 @@ export async function buildDashboardData(rawDays: number | null | undefined): Pr
     total_stars: stars.total,
     total_stars_sparkline: stars.sparkline,
     last_30d_download_totals: last30dDownloadTotals(statsRows),
+    metric_rollups: derived.metricRollups,
+    recent_evidence: derived.recentEvidence,
+    signal_candidates: derived.signalCandidates,
+    signal_guidance: derived.signalGuidance,
   }
 }
