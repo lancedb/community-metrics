@@ -30,6 +30,21 @@ export type DownloadWindowTotals = {
   lancedb: number
 }
 
+export type DownloadSnapshotPoint = {
+  period_end: string
+  lance_python: number
+  lance_rust: number
+  lancedb_python: number
+  lancedb_nodejs: number
+  lancedb_rust: number
+  python: number
+  nodejs: number
+  rust: number
+  lance: number
+  lancedb: number
+  total: number
+}
+
 export type DashboardEvidenceItem = {
   evidence_id: string
   source_type: string
@@ -117,6 +132,7 @@ export type DashboardResponse = {
   total_stars: number | null
   total_stars_sparkline: SparkPoint[]
   last_30d_download_totals: DownloadWindowTotals
+  monthly_download_snapshots: DownloadSnapshotPoint[]
   metric_rollups: DashboardMetricRollup[]
   recent_evidence: DashboardEvidenceItem[]
   signal_candidates: DashboardSignalCandidate[]

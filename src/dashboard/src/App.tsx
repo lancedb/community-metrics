@@ -5,6 +5,7 @@ import { signOut } from 'next-auth/react'
 import { fetchDashboard } from './api'
 import { ActionCockpit } from './components/ActionCockpit'
 import { Download30dTable } from './components/Download30dTable'
+import { DownloadSnapshotChart } from './components/DownloadSnapshotChart'
 import { SectionPanel } from './components/SectionPanel'
 import type { DashboardMetric, DashboardResponse } from './types'
 
@@ -141,6 +142,7 @@ export default function App() {
               initialTotals={data.last_30d_download_totals}
               maxDaysBack={90}
             />
+            <DownloadSnapshotChart points={data.monthly_download_snapshots} />
             <SectionPanel
               title="LanceDB Download Stats"
               subtitle="Monthly total SDK download trends for LanceDB across NodeJS, Python, and Rust. Card value = last full month total."
