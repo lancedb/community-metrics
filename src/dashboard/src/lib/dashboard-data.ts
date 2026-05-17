@@ -8,6 +8,7 @@ import type {
   DashboardResponse,
   DashboardSignalCandidate,
   DashboardSignalGuidance,
+  DownloadSnapshotPoint,
   DownloadWindowTotals,
   SparkPoint,
 } from '@/types'
@@ -18,6 +19,24 @@ const MAX_DAYS = 730
 const DOWNLOAD_SNAPSHOT_CUTOFF = '2025-11-30'
 const DOWNLOAD_DAILY_START = '2025-12-01'
 const SYNTHETIC_NOVEMBER_2025 = '2025-11-30'
+const DOWNLOAD_SNAPSHOT_MONTH_ENDS = [
+  '2024-09-30',
+  '2024-10-31',
+  '2024-11-30',
+  '2024-12-31',
+  '2025-01-31',
+  '2025-02-28',
+  '2025-03-31',
+  '2025-04-30',
+  '2025-05-31',
+  '2025-06-30',
+  '2025-07-31',
+  '2025-08-31',
+  '2025-09-30',
+  '2025-10-31',
+  '2025-11-30',
+  '2025-12-31',
+]
 const STAR_METRIC_IDS = new Set([
   'stars:lance:github',
   'stars:lancedb:github',
@@ -497,6 +516,96 @@ function last30dDownloadTotals(rows: Row[]): DashboardResponse['last_30d_downloa
   return downloadTotalsForWindow(rows, windowStartIso, windowEndIso)
 }
 
+function completedMonthEndBefore(day: Date): string {
+  const monthStart = new Date(Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), 1))
+  return toIsoDay(shiftDays(monthStart, -1))
+}
+
+function downloadSnapshotTargetDates(latestDay: Date): string[] {
+  const finalMonthEnd = completedMonthEndBefore(latestDay)
+  const targetDates = DOWNLOAD_SNAPSHOT_MONTH_ENDS.filter((day) => day <= finalMonthEnd)
+
+  let firstOfMonth = new Date(Date.UTC(2026, 1, 1))
+  while (true) {
+    const previousMonthEnd = toIsoDay(shiftDays(firstOfMonth, -1))
+    if (previousMonthEnd > finalMonthEnd) break
+    targetDates.push(previousMonthEnd)
+    firstOfMonth = new Date(Date.UTC(firstOfMonth.getUTCFullYear(), firstOfMonth.getUTCMonth() + 1, 1))
+  }
+
+  return [...new Set(targetDates)].sort()
+}
+
+function buildMonthlyDownloadSnapshots(
+  metricsRows: MetricDef[],
+  statsRows: Row[],
+  latestDay: Date,
+): DownloadSnapshotPoint[] {
+  const targetDates = downloadSnapshotTargetDates(latestDay)
+  if (targetDates.length === 0) return []
+
+  const targetSet = new Set(targetDates)
+  const groupedStats = rowsByMetric(statsRows)
+  const totalsByDate = new Map<string, Omit<DownloadSnapshotPoint, 'period_end' | 'total'>>()
+
+  for (const metric of metricsRows) {
+    if (metric.metric_family !== 'downloads') continue
+    if (metric.product !== 'lance' && metric.product !== 'lancedb') continue
+    if (metric.sdk !== 'python' && metric.sdk !== 'nodejs' && metric.sdk !== 'rust') continue
+
+    const points = monthlyDownloadSparkline(groupedStats.get(metric.metric_id) ?? [], MAX_DAYS)
+    for (const point of points) {
+      const periodEnd = dayKey(point.period_end)
+      if (!targetSet.has(periodEnd)) continue
+
+      const current = totalsByDate.get(periodEnd) ?? {
+        lance_python: 0,
+        lance_rust: 0,
+        lancedb_python: 0,
+        lancedb_nodejs: 0,
+        lancedb_rust: 0,
+        python: 0,
+        nodejs: 0,
+        rust: 0,
+        lance: 0,
+        lancedb: 0,
+      }
+      const value = Math.trunc(coerceNumber(point.value))
+      const metricKey = `${metric.product}_${metric.sdk}` as keyof Pick<
+        DownloadSnapshotPoint,
+        'lance_python' | 'lance_rust' | 'lancedb_python' | 'lancedb_nodejs' | 'lancedb_rust'
+      >
+      current[metricKey] += value
+      current[metric.sdk] += value
+      current[metric.product] += value
+      totalsByDate.set(periodEnd, current)
+    }
+  }
+
+  return targetDates
+    .map((periodEnd) => {
+      const totals = totalsByDate.get(periodEnd)
+      if (!totals) return null
+      const lance = Math.round(totals.lance)
+      const lancedb = Math.round(totals.lancedb)
+      return {
+        period_end: periodEnd,
+        lance_python: Math.round(totals.lance_python),
+        lance_rust: Math.round(totals.lance_rust),
+        lancedb_python: Math.round(totals.lancedb_python),
+        lancedb_nodejs: Math.round(totals.lancedb_nodejs),
+        lancedb_rust: Math.round(totals.lancedb_rust),
+        python: Math.round(totals.python),
+        nodejs: Math.round(totals.nodejs),
+        rust: Math.round(totals.rust),
+        lance,
+        lancedb,
+        total: lance + lancedb,
+      }
+    })
+    .filter((point): point is DownloadSnapshotPoint => point !== null)
+}
+
 function totalStars(statsRows: Row[], days: number): { total: number | null; sparkline: SparkPoint[] } {
   const perMetric = new Map<string, Map<string, number>>()
 
@@ -902,6 +1011,7 @@ export async function buildDashboardData(rawDays: number | null | undefined): Pr
         lance: 0,
         lancedb: 0,
       },
+      monthly_download_snapshots: [],
       metric_rollups: [],
       recent_evidence: [],
       signal_candidates: [],
@@ -995,6 +1105,7 @@ export async function buildDashboardData(rawDays: number | null | undefined): Pr
     total_stars: stars.total,
     total_stars_sparkline: stars.sparkline,
     last_30d_download_totals: last30dDownloadTotals(statsRows),
+    monthly_download_snapshots: buildMonthlyDownloadSnapshots(metricsRows, statsRows, latestDay),
     metric_rollups: derived.metricRollups,
     recent_evidence: derived.recentEvidence,
     signal_candidates: derived.signalCandidates,
