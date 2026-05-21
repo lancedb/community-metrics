@@ -19,7 +19,7 @@ from community_metrics.utils.time import latest_completed_day, parse_iso_date
 
 PRIMARY_WINDOW = "7d"
 COMPARISON_WINDOWS = ("15d", "30d")
-GUIDANCE_SCHEMA_VERSION = "v1"
+GUIDANCE_SCHEMA_VERSION = "v2"
 ALLOWED_ENGINEERING_RELEVANCE = {"ignore", "watch", "investigate", "escalate"}
 ALLOWED_CONFIDENCE = {"low", "medium", "high"}
 ALLOWED_MOVEMENT = {"new", "sustained", "accelerating", "fading", "unclear"}
@@ -39,18 +39,18 @@ GUIDANCE_RESPONSE_SCHEMA: dict[str, Any] = {
         "citations",
     ],
     "properties": {
-        "executive_summary": {"type": "string"},
+        "executive_summary": {"type": "string", "maxLength": 180},
         "movement_assessment": {
             "type": "string",
             "enum": sorted(ALLOWED_MOVEMENT),
         },
-        "why_it_matters": {"type": "string"},
-        "likely_community": {"type": "string"},
+        "why_it_matters": {"type": "string", "maxLength": 220},
+        "likely_community": {"type": "string", "maxLength": 80},
         "recommended_next_steps": {
             "type": "array",
-            "items": {"type": "string"},
+            "items": {"type": "string", "maxLength": 140},
             "minItems": 1,
-            "maxItems": 5,
+            "maxItems": 4,
         },
         "engineering_relevance": {
             "type": "string",
@@ -69,8 +69,8 @@ GUIDANCE_RESPONSE_SCHEMA: dict[str, Any] = {
                         "enum": ["signal", "rollup", "evidence"],
                     },
                     "source_id": {"type": "string"},
-                    "fact": {"type": "string"},
-                    "used_for": {"type": "string"},
+                    "fact": {"type": "string", "maxLength": 180},
+                    "used_for": {"type": "string", "maxLength": 120},
                 },
             },
             "minItems": 1,
@@ -180,6 +180,11 @@ and lower confidence. The 7d window is the primary assessment period. Use 15d an
 rollups as comparison context to decide whether a signal looks new, sustained,
 accelerating, fading, or unclear. Every non-obvious conclusion must cite a supplied
 signal_id, rollup_id, or evidence_id with the concrete fact used.
+
+Keep the Insights tab readable. Write one concise sentence for executive_summary and
+why_it_matters. Generate no more than 3-4 recommended_next_steps bullets, and keep
+each bullet short, concrete, and directly useful to a DevRel reader. When writing
+numbers, use at most 1 decimal place.
 """.strip()
 
 
@@ -212,6 +217,12 @@ def guidance_prompt_payload(
             "citation_source_ids_must_come_from": _payload_ids(
                 signal, rollups, evidence
             ),
+            "brevity": {
+                "executive_summary": "one concise sentence",
+                "why_it_matters": "one concise sentence",
+                "recommended_next_steps": "3-4 short bullets maximum",
+                "number_format": "use at most 1 decimal place",
+            },
         },
     }
 
@@ -242,7 +253,7 @@ def parse_guidance_response(raw_response: dict[str, Any]) -> dict[str, Any]:
             str(step)
             for step in parsed.get("recommended_next_steps", [])
             if str(step).strip()
-        ][:5],
+        ][:4],
         "engineering_relevance": _one_of(
             str(parsed.get("engineering_relevance") or "watch"),
             ALLOWED_ENGINEERING_RELEVANCE,
@@ -295,7 +306,12 @@ def _weekly_signals(
     store: LanceDBStore, analysis_start: date, analysis_end: date
 ) -> list[dict[str, Any]]:
     rows = store.query_table("signal_candidates", limit=None)
-    matches = [row for row in rows if _parse_day(row.get("window_end")) == analysis_end]
+    matches = [
+        row
+        for row in rows
+        if _parse_day(row.get("window_end")) == analysis_end
+        and str(row.get("signal_type")) != "social_mention_burst"
+    ]
     return sorted(matches, key=lambda row: float(row.get("score") or 0), reverse=True)
 
 
@@ -319,7 +335,8 @@ def _evidence_for_guidance(
     return [
         row
         for row in rows
-        if start <= _parse_datetime(row.get("occurred_at")).date() <= latest_day
+        if str(row.get("source_type")) not in {"hackernews", "manual"}
+        and start <= _parse_datetime(row.get("occurred_at")).date() <= latest_day
     ]
 
 

@@ -7,6 +7,7 @@ import pytest
 
 from community_metrics.jobs import generate_signal_guidance
 from community_metrics.jobs.generate_signal_guidance import (
+    GUIDANCE_RESPONSE_SCHEMA,
     _evidence_for_guidance,
     guidance_prompt_payload,
     guidance_row,
@@ -91,6 +92,16 @@ def test_guidance_prompt_payload_includes_7d_15d_30d_context() -> None:
         "downloads:lancedb:nodejs:15d:2026-04-30"
         in payload["output_requirements"]["citation_source_ids_must_come_from"]
     )
+    assert payload["output_requirements"]["brevity"]["recommended_next_steps"] == (
+        "3-4 short bullets maximum"
+    )
+    assert payload["output_requirements"]["brevity"]["number_format"] == (
+        "use at most 1 decimal place"
+    )
+    assert (
+        GUIDANCE_RESPONSE_SCHEMA["properties"]["recommended_next_steps"]["maxItems"]
+        == 4
+    )
 
 
 def test_parse_guidance_response_maps_structured_output() -> None:
@@ -101,7 +112,13 @@ def test_parse_guidance_response_maps_structured_output() -> None:
                 "movement_assessment": "accelerating",
                 "why_it_matters": "This may indicate TypeScript agent-memory pull.",
                 "likely_community": "TypeScript agent-memory builders",
-                "recommended_next_steps": ["Audit TypeScript memory docs"],
+                "recommended_next_steps": [
+                    "Audit TypeScript memory docs",
+                    "Check the package changelog",
+                    "Review linked HN context",
+                    "Draft a short maintainer note",
+                    "This fifth item should be dropped",
+                ],
                 "engineering_relevance": "watch",
                 "confidence": "medium",
                 "citations": [
@@ -119,7 +136,12 @@ def test_parse_guidance_response_maps_structured_output() -> None:
     guidance = parse_guidance_response(raw)
 
     assert guidance["movement_assessment"] == "accelerating"
-    assert guidance["recommended_next_steps"] == ["Audit TypeScript memory docs"]
+    assert guidance["recommended_next_steps"] == [
+        "Audit TypeScript memory docs",
+        "Check the package changelog",
+        "Review linked HN context",
+        "Draft a short maintainer note",
+    ]
     assert (
         guidance["citations"][0]["source_id"]
         == "downloads:lancedb:nodejs:7d:2026-04-30"
@@ -165,7 +187,7 @@ def test_run_requires_openai_api_key(monkeypatch) -> None:
         generate_signal_guidance.run()
 
 
-def test_evidence_for_guidance_filters_timestamps_client_side() -> None:
+def test_evidence_for_guidance_filters_timestamps_and_hn_client_side() -> None:
     class _Store:
         def __init__(self) -> None:
             self.where = "not-called"
@@ -180,13 +202,18 @@ def test_evidence_for_guidance_filters_timestamps_client_side() -> None:
                     "occurred_at": datetime(2026, 3, 1, tzinfo=timezone.utc),
                 },
                 _evidence(),
+                {
+                    **_evidence(),
+                    "evidence_id": "non-hn",
+                    "source_type": "dependency_manifest",
+                },
             ]
 
     store = _Store()
     rows = _evidence_for_guidance(store, date(2026, 4, 30))
 
     assert store.where is None
-    assert [row["evidence_id"] for row in rows] == ["hn-1"]
+    assert [row["evidence_id"] for row in rows] == ["non-hn"]
 
 
 def test_run_upserts_guidance_without_mutating_source_tables(monkeypatch) -> None:
@@ -203,7 +230,14 @@ def test_run_upserts_guidance_without_mutating_source_tables(monkeypatch) -> Non
 
         def query_table(self, table_name, **_kwargs):
             if table_name == "signal_candidates":
-                return [_signal()]
+                return [
+                    _signal(),
+                    {
+                        **_signal(),
+                        "signal_id": "social_mention_burst:2026-04-24:2026-04-30:hn-manual-mention-burst",
+                        "signal_type": "social_mention_burst",
+                    },
+                ]
             if table_name == "dashboard_metric_rollups":
                 return [_rollup("7d"), _rollup("15d"), _rollup("30d")]
             if table_name == "evidence_items":
@@ -223,6 +257,7 @@ def test_run_upserts_guidance_without_mutating_source_tables(monkeypatch) -> Non
             assert kwargs["reasoning_effort"] == "high"
             payload = kwargs["payload"]
             assert {row["window"] for row in payload["rollups"]} == {"7d", "15d", "30d"}
+            assert payload["evidence"] == []
             return {
                 "output_text": json.dumps(
                     {

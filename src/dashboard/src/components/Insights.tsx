@@ -1,14 +1,12 @@
 import type {
   DashboardEvidenceItem,
-  DashboardMetricRollup,
   DashboardSignalCandidate,
   DashboardSignalGuidance,
 } from '../types'
 
-type ActionCockpitProps = {
+type InsightsProps = {
   signals: DashboardSignalCandidate[]
   guidance: DashboardSignalGuidance[]
-  rollups: DashboardMetricRollup[]
   evidence: DashboardEvidenceItem[]
 }
 
@@ -18,15 +16,6 @@ function label(value: string): string {
     .filter(Boolean)
     .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
     .join(' ')
-}
-
-function formatInt(value: number): string {
-  return Intl.NumberFormat('en-US').format(value)
-}
-
-function formatPercent(value: number): string {
-  const sign = value > 0 ? '+' : ''
-  return `${sign}${value.toFixed(0)}%`
 }
 
 function formatDate(value: string): string {
@@ -39,23 +28,18 @@ function formatDate(value: string): string {
   })
 }
 
-function metricName(metricId: string): string {
-  const parts = metricId.split(':')
-  if (parts.length < 3) return metricId
-  const product = parts[1] === 'lancedb' ? 'LanceDB' : 'Lance'
-  const sdk = parts[2] === 'nodejs' ? 'NodeJS' : `${parts[2].charAt(0).toUpperCase()}${parts[2].slice(1)}`
-  return `${product} ${sdk}`
+function signalIdentityKey(signalId: string): string {
+  const parts = signalId.split(':')
+  if (parts.length < 4) return signalId
+  return `${parts[0]}:${parts.slice(3).join(':')}`
 }
 
-function guidanceForSignal(signal: DashboardSignalCandidate, guidance: DashboardSignalGuidance[]) {
+function guidanceHistoryForSignal(signal: DashboardSignalCandidate, guidance: DashboardSignalGuidance[]) {
+  const key = signalIdentityKey(signal.signal_id)
   return guidance
-    .filter((item) => item.signal_id === signal.signal_id)
-    .sort((a, b) => b.generated_at.localeCompare(a.generated_at))[0]
-}
-
-function rollupsForSignal(signal: DashboardSignalCandidate, rollups: DashboardMetricRollup[]) {
-  const related = new Set(signal.related_metrics)
-  return rollups.filter((rollup) => related.has(rollup.metric_id) && ['7d', '15d', '30d'].includes(rollup.window))
+    .filter((item) => item.signal_id === signal.signal_id || signalIdentityKey(item.signal_id) === key)
+    .sort((a, b) => b.generated_at.localeCompare(a.generated_at))
+    .slice(0, 20)
 }
 
 function evidenceForSignal(
@@ -70,22 +54,53 @@ function evidenceForSignal(
   return evidence.filter((item) => ids.has(item.evidence_id)).slice(0, 3)
 }
 
-function topRollups(rollups: DashboardMetricRollup[]) {
-  return rollups
-    .filter((rollup) => rollup.window === '7d' && rollup.metric_family === 'downloads')
-    .sort((a, b) => Math.abs(b.percent_change) - Math.abs(a.percent_change))
-    .slice(0, 6)
+function RecentInsightsTable({ insights }: { insights: DashboardSignalGuidance[] }) {
+  if (insights.length === 0) return null
+
+  return (
+    <div className="mt-3 border-t border-edge pt-3">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">Recent Insights</p>
+        <p className="text-xs text-muted">Top {insights.length} most recent</p>
+      </div>
+      <div className="overflow-x-auto rounded-lg border border-edge bg-white/70">
+        <table className="min-w-[760px] w-full border-collapse text-left text-sm">
+          <thead>
+            <tr className="border-b border-edge text-[11px] uppercase tracking-[0.14em] text-muted">
+              <th className="px-3 py-2 font-semibold">Generated</th>
+              <th className="px-3 py-2 font-semibold">Movement</th>
+              <th className="px-3 py-2 font-semibold">Relevance</th>
+              <th className="px-3 py-2 font-semibold">Confidence</th>
+              <th className="px-3 py-2 font-semibold">Summary</th>
+            </tr>
+          </thead>
+          <tbody>
+            {insights.map((insight) => (
+              <tr key={insight.guidance_id} className="border-b border-edge/70 last:border-0">
+                <td className="whitespace-nowrap px-3 py-2 text-xs text-muted">{formatDate(insight.generated_at)}</td>
+                <td className="whitespace-nowrap px-3 py-2 text-xs font-semibold text-ink">
+                  {label(insight.movement_assessment)}
+                </td>
+                <td className="whitespace-nowrap px-3 py-2 text-xs text-muted">{label(insight.engineering_relevance)}</td>
+                <td className="whitespace-nowrap px-3 py-2 text-xs text-muted">{label(insight.confidence)}</td>
+                <td className="px-3 py-2 text-sm text-ink">{insight.executive_summary}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
 }
 
-export function ActionCockpit({ signals, guidance, rollups, evidence }: ActionCockpitProps) {
+export function Insights({ signals, guidance, evidence }: InsightsProps) {
   const visibleSignals = signals.slice(0, 5)
-  const movers = topRollups(rollups)
 
   return (
     <section className="space-y-4 rounded-2xl border-2 border-brand bg-white p-5 shadow-card">
       <header className="flex flex-wrap items-end justify-between gap-3 border-b border-edge pb-3">
         <div>
-          <h2 className="text-2xl font-bold text-ink">Action Cockpit</h2>
+          <h2 className="text-2xl font-bold text-ink">Insights</h2>
           <p className="text-sm text-muted">
             Weekly DevRel guidance generated from 7d signals, 15d/30d comparisons, and cited evidence.
           </p>
@@ -95,7 +110,7 @@ export function ActionCockpit({ signals, guidance, rollups, evidence }: ActionCo
         </div>
       </header>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(320px,0.8fr)]">
+      <div>
         <div className="space-y-3">
           {visibleSignals.length === 0 ? (
             <div className="rounded-xl border border-edge bg-panel p-4 text-sm text-muted">
@@ -103,10 +118,10 @@ export function ActionCockpit({ signals, guidance, rollups, evidence }: ActionCo
             </div>
           ) : (
             visibleSignals.map((signal) => {
-              const signalGuidance = guidanceForSignal(signal, guidance)
-              const signalRollups = rollupsForSignal(signal, rollups)
+              const signalInsights = guidanceHistoryForSignal(signal, guidance)
+              const signalGuidance = signalInsights[0]
               const signalEvidence = evidenceForSignal(signal, evidence, signalGuidance)
-              const nextSteps = signalGuidance?.recommended_next_steps.filter((step) => step.trim().length > 0) ?? []
+              const nextSteps = signalGuidance?.recommended_next_steps.filter((step) => step.trim().length > 0).slice(0, 4) ?? []
               const citedFacts = signalGuidance?.citations
                 .filter((citation) => citation.fact.trim().length > 0)
                 .slice(0, 3) ?? []
@@ -122,20 +137,6 @@ export function ActionCockpit({ signals, guidance, rollups, evidence }: ActionCo
 
                   <h3 className="text-lg font-bold text-ink">{signalGuidance?.executive_summary || signal.title}</h3>
                   <p className="mt-1 text-sm text-muted">{signalGuidance?.why_it_matters || signal.summary}</p>
-
-                  <div className="mt-3 grid gap-2 sm:grid-cols-3">
-                    {signalRollups.slice(0, 3).map((rollup) => (
-                      <div key={rollup.rollup_id} className="rounded-lg border border-edge bg-white/70 p-3">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">
-                          {metricName(rollup.metric_id)} · {rollup.window}
-                        </p>
-                        <p className="mt-1 text-base font-bold text-ink">{formatInt(rollup.current_value)}</p>
-                        <p className="text-xs text-muted">
-                          {formatPercent(rollup.percent_change)} · share {(rollup.sdk_share * 100).toFixed(0)}%
-                        </p>
-                      </div>
-                    ))}
-                  </div>
 
                   {signalGuidance && (nextSteps.length > 0 || citedFacts.length > 0) ? (
                     <div className="mt-3 grid gap-3 lg:grid-cols-2">
@@ -188,33 +189,13 @@ export function ActionCockpit({ signals, guidance, rollups, evidence }: ActionCo
                       </div>
                     </div>
                   )}
+
+                  <RecentInsightsTable insights={signalInsights} />
                 </article>
               )
             })
           )}
         </div>
-
-        <aside className="space-y-4">
-          <div className="rounded-xl border border-edge bg-panel p-4">
-            <h3 className="text-base font-bold text-ink">7d Movers</h3>
-            <div className="mt-3 space-y-2">
-              {movers.length === 0 ? (
-                <p className="text-sm text-muted">No 7d rollups are available yet.</p>
-              ) : (
-                movers.map((rollup) => (
-                  <div key={rollup.rollup_id} className="flex items-center justify-between gap-3 rounded-lg bg-white/70 p-3">
-                    <div>
-                      <p className="text-sm font-semibold text-ink">{metricName(rollup.metric_id)}</p>
-                      <p className="text-xs text-muted">{formatInt(rollup.current_value)} downloads</p>
-                    </div>
-                    <p className="text-sm font-bold text-ink">{formatPercent(rollup.percent_change)}</p>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-        </aside>
       </div>
     </section>
   )

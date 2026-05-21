@@ -270,6 +270,12 @@ function coerceCitations(value: unknown): DashboardGuidanceCitation[] {
     .filter((item) => item.source_id && item.fact)
 }
 
+function signalIdentityKey(signalId: string): string {
+  const parts = signalId.split(':')
+  if (parts.length < 4) return signalId
+  return `${parts[0]}:${parts.slice(3).join(':')}`
+}
+
 function rowsByMetric(rows: Row[]): Map<string, Row[]> {
   const grouped = new Map<string, Row[]>()
   for (const row of rows) {
@@ -845,7 +851,7 @@ async function fetchDerivedDashboardData(): Promise<{
       'confidence',
       'citations',
     ],
-    limit: 100,
+    limit: 500,
   })
 
   const duckdbExtensionRows = await queryOptionalTable(db, 'duckdb_lance_extension_downloads_monthly', {
@@ -914,6 +920,7 @@ async function fetchDerivedDashboardData(): Promise<{
       communities: coerceList(row.communities),
       evidence_strength: String(row.evidence_strength ?? ''),
     }))
+    .filter((row) => row.source_type !== 'hackernews' && row.source_type !== 'manual')
     .sort((a, b) => b.occurred_at.localeCompare(a.occurred_at))
     .slice(0, 8)
 
@@ -932,9 +939,13 @@ async function fetchDerivedDashboardData(): Promise<{
       confidence: String(row.confidence ?? ''),
       suggested_action: String(row.suggested_action ?? ''),
     }))
+    .filter((row) => row.signal_type !== 'social_mention_burst')
     .sort((a, b) => b.score - a.score)
     .slice(0, 8)
 
+  const currentSignalIds = new Set(signalCandidates.map((signal) => signal.signal_id))
+  const currentSignalKeys = new Set(signalCandidates.map((signal) => signalIdentityKey(signal.signal_id)))
+  const guidanceCountBySignal = new Map<string, number>()
   const signalGuidance = guidanceRows
     .map((row) => ({
       guidance_id: String(row.guidance_id ?? ''),
@@ -955,8 +966,15 @@ async function fetchDerivedDashboardData(): Promise<{
       confidence: String(row.confidence ?? ''),
       citations: coerceCitations(row.citations),
     }))
+    .filter((item) => currentSignalIds.has(item.signal_id) || currentSignalKeys.has(signalIdentityKey(item.signal_id)))
     .sort((a, b) => b.generated_at.localeCompare(a.generated_at))
-    .slice(0, 20)
+    .filter((item) => {
+      const key = signalIdentityKey(item.signal_id)
+      const count = guidanceCountBySignal.get(key) ?? 0
+      if (count >= 20) return false
+      guidanceCountBySignal.set(key, count + 1)
+      return true
+    })
 
   const duckdbLanceExtensionDownloads = duckdbExtensionRows
     .map((row) => ({

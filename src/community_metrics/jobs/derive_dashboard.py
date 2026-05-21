@@ -14,8 +14,6 @@ DOWNLOAD_SPIKE_PERCENT_THRESHOLD = 100.0
 DOWNLOAD_SPIKE_MIN_VALUE = 1000
 SUSTAINED_GROWTH_PERCENT_THRESHOLD = 20.0
 SDK_SHARE_SHIFT_THRESHOLD = 0.15
-SOCIAL_BURST_DAYS = 14
-SOCIAL_BURST_MIN_ITEMS = 3
 
 
 def run(*, days: int = 210) -> dict[str, int]:
@@ -249,12 +247,6 @@ def build_signal_candidates(
                 )
             )
 
-    burst = _social_burst_signal(
-        evidence, latest_day=latest_day, detected_at=detected_at
-    )
-    if burst:
-        signals.append(burst)
-
     return signals
 
 
@@ -369,47 +361,6 @@ def _is_sustained_growth(row: dict[str, Any]) -> bool:
     return (
         row["trend_slope"] > 0
         and row["percent_change"] >= SUSTAINED_GROWTH_PERCENT_THRESHOLD
-    )
-
-
-def _social_burst_signal(
-    evidence: list[dict[str, Any]],
-    *,
-    latest_day: date,
-    detected_at: datetime,
-) -> dict[str, Any] | None:
-    window_start = latest_day - timedelta(days=SOCIAL_BURST_DAYS - 1)
-    recent = [
-        row
-        for row in evidence
-        if str(row.get("source_type")) in {"hackernews", "manual"}
-        and window_start <= _row_datetime(row.get("occurred_at")).date() <= latest_day
-    ]
-    if len(recent) < SOCIAL_BURST_MIN_ITEMS:
-        return None
-    evidence_ids = [
-        str(row.get("evidence_id")) for row in recent if row.get("evidence_id")
-    ]
-    related_metrics = sorted(
-        {
-            str(metric)
-            for row in recent
-            for metric in row.get("related_metrics", [])
-            if metric
-        }
-    )
-    return _signal(
-        signal_type="social_mention_burst",
-        detected_at=detected_at,
-        window_start=window_start.isoformat(),
-        window_end=latest_day.isoformat(),
-        title="HN/manual mention burst",
-        summary=f"{len(recent)} relevant HN/manual evidence items appeared recently.",
-        related_metrics=related_metrics,
-        evidence_ids=evidence_ids,
-        score=float(len(recent)),
-        confidence="medium",
-        suggested_action="community_outreach",
     )
 
 

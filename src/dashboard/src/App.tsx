@@ -3,16 +3,20 @@
 import { useEffect, useMemo, useState } from 'react'
 import { signOut } from 'next-auth/react'
 import { fetchDashboard } from './api'
-import { ActionCockpit } from './components/ActionCockpit'
 import { Download30dTable } from './components/Download30dTable'
+import { DownloadMovers } from './components/DownloadMovers'
 import { DownloadSnapshotChart } from './components/DownloadSnapshotChart'
 import { DuckDBExtensionDownloadsWidget } from './components/DuckDBExtensionDownloadsWidget'
+import { Insights } from './components/Insights'
 import { SectionPanel } from './components/SectionPanel'
 import type { DashboardMetric, DashboardResponse } from './types'
+
+type DashboardTab = 'charts' | 'insights'
 
 export default function App() {
   const [data, setData] = useState<DashboardResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<DashboardTab>('charts')
 
   useEffect(() => {
     let cancelled = false
@@ -139,35 +143,67 @@ export default function App() {
 
         {data && (
           <>
-            <Download30dTable
-              initialTotals={data.last_30d_download_totals}
-              maxDaysBack={90}
-            />
-            <DownloadSnapshotChart points={data.monthly_download_snapshots} />
-            <SectionPanel
-              title="LanceDB Download Stats"
-              subtitle="Monthly total SDK download trends for LanceDB across NodeJS, Python, and Rust. Card value = last full month total."
-              items={sections.lancedbDownloads}
-              emphasized
-            />
-            <SectionPanel
-              title="Lance Download Stats"
-              subtitle="Monthly total SDK download trends for Lance format packages. Card value = last full month total."
-              items={sections.lanceDownloads}
-              emphasized
-            />
-            <DuckDBExtensionDownloadsWidget points={data.duckdb_lance_extension_downloads} />
-            <SectionPanel
-              title="Star Histories"
-              subtitle="GitHub stars for Lance, LanceDB, Lance Graph, Lance Context, and the combined total."
-              items={sections.starItems}
-            />
-            <ActionCockpit
-              signals={data.signal_candidates}
-              guidance={data.signal_guidance}
-              rollups={data.metric_rollups}
-              evidence={data.recent_evidence}
-            />
+            <div className="flex flex-wrap gap-2 border-b border-edge">
+              {[
+                { id: 'charts' as const, label: 'Charts & Downloads' },
+                { id: 'insights' as const, label: 'Insights' },
+              ].map((tab) => {
+                const isActive = activeTab === tab.id
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`min-h-11 rounded-t-lg border px-4 py-2 text-sm font-semibold transition ${
+                      isActive
+                        ? 'border-edge border-b-white bg-white text-ink'
+                        : 'border-transparent bg-white/50 text-muted hover:border-edge hover:text-ink'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                )
+              })}
+            </div>
+
+            {activeTab === 'charts' && (
+              <>
+                <Download30dTable
+                  initialTotals={data.last_30d_download_totals}
+                  maxDaysBack={90}
+                />
+                <DownloadSnapshotChart points={data.monthly_download_snapshots} />
+                <SectionPanel
+                  title="LanceDB Download Stats"
+                  subtitle="Monthly total SDK download trends for LanceDB across NodeJS, Python, and Rust. Card value = last full month total."
+                  items={sections.lancedbDownloads}
+                  emphasized
+                />
+                <SectionPanel
+                  title="Lance Download Stats"
+                  subtitle="Monthly total SDK download trends for Lance format packages. Card value = last full month total."
+                  items={sections.lanceDownloads}
+                  emphasized
+                />
+                <DuckDBExtensionDownloadsWidget points={data.duckdb_lance_extension_downloads} />
+                <SectionPanel
+                  title="Star Histories"
+                  subtitle="GitHub stars for Lance, LanceDB, Lance Graph, Lance Context, and the combined total."
+                  items={sections.starItems}
+                />
+              </>
+            )}
+
+            {activeTab === 'insights' && (
+              <>
+                <DownloadMovers rollups={data.metric_rollups} />
+                <Insights
+                  signals={data.signal_candidates}
+                  guidance={data.signal_guidance}
+                  evidence={data.recent_evidence}
+                />
+              </>
+            )}
           </>
         )}
       </main>
