@@ -110,6 +110,9 @@ Derived tables:
 - `signal_candidates`: deterministic DevRel signals such as `download_spike`, `sustained_growth`, `sdk_share_shift`, and `social_mention_burst`.
 - `signal_guidance`: weekly OpenAI-generated DevRel guidance with citations to concrete signal, rollup, and evidence IDs.
 
+Isolated monthly metric table:
+- `duckdb_lance_extension_downloads_monthly`: DuckDB `lance` extension downloads from January 2026 onward, split by core and community repositories.
+
 The derived jobs do not modify source-of-truth tables (`metrics`, `stats`, `history`).
 The dashboard reads cached guidance only; it does not call OpenAI at request time.
 `generate_signal_guidance` requires `OPENAI_API_KEY` and can be rerun for the same week; guidance rows are upserted.
@@ -127,6 +130,15 @@ One-time download snapshot backfill for older month-end history:
 uv run python one_time_snapshot_backfill.py
 uv run python one_time_snapshot_backfill.py --apply
 ```
+
+Monthly DuckDB `lance` extension download refresh:
+
+```bash
+uv run python -m community_metrics.jobs.update_duckdb_extension_downloads
+```
+
+This writes only `duckdb_lance_extension_downloads_monthly`; it does not modify
+`metrics`, `stats`, `history`, or derived dashboard tables.
 
 ## 5. Run frontend locally
 
@@ -168,6 +180,7 @@ curl "http://127.0.0.1:3000/api/v1/dashboard/daily?days=30"
 ```
 
 The dashboard defaults to a 730-day history window so pre-`2025-12-01` monthly snapshot points remain visible.
+The DuckDB extension widget reads `duckdb_lance_extension_downloads_monthly` and starts at January 2026.
 The Action Cockpit reads from derived `signal_candidates`, `dashboard_metric_rollups`, `evidence_items`, and `signal_guidance`; it will show pending states until the derived jobs and weekly guidance job have run.
 
 ## 7. Debug script (direct LanceDB reads)

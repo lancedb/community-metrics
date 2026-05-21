@@ -19,6 +19,9 @@ Architecture split:
   - `lancedb/lancedb`
   - `lance-format/lance-graph`
   - `lance-format/lance-context`
+- DuckDB `lance` extension downloads:
+  - core repository: `extensions.duckdb.org`
+  - community repository: `community-extensions.duckdb.org`
 
 ## Prerequisites
 
@@ -55,9 +58,12 @@ Tables:
 - `evidence_items`: derived/manual community evidence such as Hacker News mentions
 - `signal_candidates`: derived DevRel signal candidates generated from rollups and evidence
 - `signal_guidance`: weekly cached LLM guidance generated from signals, rollups, and evidence
+- `duckdb_lance_extension_downloads_monthly`: monthly DuckDB `lance` extension downloads split by core/community repository
 
 `metrics`, `stats`, and `history` are the source-of-truth tables. The dashboard-derived
 tables can be recreated from source data and external evidence collectors.
+DuckDB extension download rows are isolated in their own monthly table and do not modify
+`metrics`, `stats`, `history`, or the derived dashboard tables.
 
 Daily row semantics in `stats`:
 - `period_start == period_end`
@@ -103,12 +109,27 @@ uv run python one_time_snapshot_backfill.py
 uv run python one_time_snapshot_backfill.py --apply
 ```
 
+Monthly DuckDB `lance` extension download refresh:
+
+```bash
+uv run python -m community_metrics.jobs.update_duckdb_extension_downloads
+```
+
+This recomputes monthly rows from January 2026 through the current month, marks the
+current month as partial, and writes only `duckdb_lance_extension_downloads_monthly`.
+
 ### Suggested Cron (EC2)
 
 Run daily at **09:00 UTC**:
 
 ```cron
 0 9 * * * cd /path/to/community-metrics && /usr/bin/env -S bash -lc 'uv run python -m community_metrics.jobs.daily_refresh >> /var/log/community-metrics/daily_refresh.log 2>&1'
+```
+
+Run monthly DuckDB extension refresh at **10:00 UTC** on the first day of each month:
+
+```cron
+0 10 1 * * cd /path/to/community-metrics && /usr/bin/env -S bash -lc 'uv run python -m community_metrics.jobs.update_duckdb_extension_downloads >> /var/log/community-metrics/update_duckdb_extension_downloads.log 2>&1'
 ```
 
 ## Frontend (Next.js + Vercel)
@@ -176,6 +197,9 @@ If/when available, use a dedicated read-scoped key for Vercel.
 - From `2025-12-01` onward, monthly download points are aggregated from daily rows.
 - Star charts remain daily cumulative series.
 - Total stars combine all tracked GitHub star repos.
+- DuckDB `lance` extension downloads start at January 2026 and are read from
+  `duckdb_lance_extension_downloads_monthly`; the widget displays the latest
+  community+core total with community and core monthly lines on one chart.
 - The Action Cockpit reads precomputed `signal_candidates`, `dashboard_metric_rollups`, `evidence_items`, and `signal_guidance`.
 - HN evidence uses `occurred_at` as the filter/order field for "most recent mentions" UI.
 - LLM guidance is cached in `signal_guidance`; the dashboard never calls OpenAI during page load.
@@ -250,6 +274,7 @@ Reddit/F5bot and GitHub downstream dependency automation are intentionally defer
 | `collect_hn_evidence` | Collect recent Hacker News evidence into derived evidence table | `uv run python -m community_metrics.jobs.collect_hn_evidence --lookback-days 30` |
 | `derive_dashboard` | Recompute dashboard rollups and signal candidates | `uv run python -m community_metrics.jobs.derive_dashboard` |
 | `generate_signal_guidance` | Generate weekly cached LLM guidance for the Action Cockpit | `uv run python -m community_metrics.jobs.generate_signal_guidance --window-days 7` |
+| `update_duckdb_extension_downloads` | Refresh monthly DuckDB `lance` extension downloads | `uv run python -m community_metrics.jobs.update_duckdb_extension_downloads` |
 
 ## Debug helper
 

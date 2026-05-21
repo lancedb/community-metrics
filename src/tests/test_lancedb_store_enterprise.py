@@ -119,6 +119,24 @@ def test_create_derived_tables_creates_only_derived_tables() -> None:
     ]
 
 
+def test_ensure_duckdb_extension_downloads_table_creates_only_new_table() -> None:
+    class _DB:
+        def __init__(self) -> None:
+            self.create_calls: list[str] = []
+
+        def create_table(self, name: str, **kwargs):
+            self.create_calls.append(name)
+            assert kwargs["mode"] == "exist_ok"
+            return object()
+
+    store = LanceDBStore.__new__(LanceDBStore)
+    store.db = _DB()
+
+    store.ensure_duckdb_extension_downloads_table()
+
+    assert store.db.create_calls == ["duckdb_lance_extension_downloads_monthly"]
+
+
 def test_create_required_tables_recreate_uses_overwrite() -> None:
     class _DB:
         def __init__(self) -> None:
@@ -290,6 +308,63 @@ def test_replace_stats_deletes_metric_windows_before_append() -> None:
         in store.db.table.deletes
     )
     assert len(store.db.table.add_rows) == 3
+
+
+def test_upsert_duckdb_extension_downloads_replaces_only_matching_months() -> None:
+    class _Table:
+        def __init__(self) -> None:
+            self.deletes: list[str] = []
+            self.add_rows: list[dict[str, object]] = []
+
+        def delete(self, predicate: str) -> None:
+            self.deletes.append(predicate)
+
+        def add(self, rows, mode: str = "append") -> None:
+            assert mode == "append"
+            self.add_rows = list(rows)
+
+    class _DB:
+        def __init__(self) -> None:
+            self.table = _Table()
+
+        def open_table(self, name: str):
+            assert name == "duckdb_lance_extension_downloads_monthly"
+            return self.table
+
+    store = LanceDBStore.__new__(LanceDBStore)
+    store.db = _DB()
+
+    result = store.upsert_duckdb_extension_downloads_monthly(
+        [
+            {
+                "month_start": "2026-01-01",
+                "month_label": "2026-01",
+                "core_downloads": 10,
+                "community_downloads": 20,
+                "total_downloads": 30,
+                "is_partial_month": False,
+                "latest_source_update_at": "2026-01-31T00:00:00Z",
+            },
+            {
+                "month_start": date(2026, 2, 1),
+                "month_label": "2026-02",
+                "core_downloads": 3,
+                "community_downloads": 4,
+                "total_downloads": 7,
+                "is_partial_month": True,
+                "latest_source_update_at": "2026-02-06T00:00:00Z",
+            },
+        ]
+    )
+
+    assert result == {"inserted": 2, "updated": 0}
+    assert store.db.table.deletes == [
+        "month_start = DATE '2026-01-01'",
+        "month_start = DATE '2026-02-01'",
+    ]
+    assert len(store.db.table.add_rows) == 2
+    assert store.db.table.add_rows[0]["month_start"] == date(2026, 1, 1)
+    assert store.db.table.add_rows[1]["is_partial_month"] is True
 
 
 def test_query_table_uses_query_builder_when_available() -> None:
