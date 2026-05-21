@@ -160,6 +160,18 @@ HISTORY_SCHEMA = pa.schema(
     ]
 )
 
+DUCKDB_EXTENSION_DOWNLOADS_MONTHLY_SCHEMA = pa.schema(
+    [
+        pa.field("month_start", pa.date32()),
+        pa.field("month_label", pa.string()),
+        pa.field("core_downloads", pa.int64()),
+        pa.field("community_downloads", pa.int64()),
+        pa.field("total_downloads", pa.int64()),
+        pa.field("is_partial_month", pa.bool_()),
+        pa.field("latest_source_update_at", pa.timestamp("us", tz="UTC")),
+    ]
+)
+
 
 METRIC_DEFINITIONS: list[MetricDefinition] = [
     MetricDefinition(

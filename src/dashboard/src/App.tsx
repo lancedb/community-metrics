@@ -6,6 +6,7 @@ import { fetchDashboard } from './api'
 import { ActionCockpit } from './components/ActionCockpit'
 import { Download30dTable } from './components/Download30dTable'
 import { DownloadSnapshotChart } from './components/DownloadSnapshotChart'
+import { DuckDBExtensionDownloadsWidget } from './components/DuckDBExtensionDownloadsWidget'
 import { SectionPanel } from './components/SectionPanel'
 import type { DashboardMetric, DashboardResponse } from './types'
 
@@ -155,6 +156,7 @@ export default function App() {
               items={sections.lanceDownloads}
               emphasized
             />
+            <DuckDBExtensionDownloadsWidget points={data.duckdb_lance_extension_downloads} />
             <SectionPanel
               title="Star Histories"
               subtitle="GitHub stars for Lance, LanceDB, Lance Graph, Lance Context, and the combined total."

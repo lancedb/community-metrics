@@ -13,6 +13,7 @@ from community_metrics.config import (
     LANCEDB_REGION,
 )
 from community_metrics.models import (
+    DUCKDB_EXTENSION_DOWNLOADS_MONTHLY_SCHEMA,
     EVIDENCE_ITEMS_SCHEMA,
     HISTORY_SCHEMA,
     METRICS_SCHEMA,
@@ -31,6 +32,7 @@ TABLE_SCHEMAS = {
     "evidence_items": EVIDENCE_ITEMS_SCHEMA,
     "signal_candidates": SIGNAL_CANDIDATES_SCHEMA,
     "signal_guidance": SIGNAL_GUIDANCE_SCHEMA,
+    "duckdb_lance_extension_downloads_monthly": DUCKDB_EXTENSION_DOWNLOADS_MONTHLY_SCHEMA,
 }
 EXPECTED_TABLES = ("metrics", "stats", "history")
 DERIVED_TABLES = (
@@ -39,6 +41,7 @@ DERIVED_TABLES = (
     "signal_candidates",
     "signal_guidance",
 )
+DUCKDB_EXTENSION_DOWNLOADS_MONTHLY_TABLE = "duckdb_lance_extension_downloads_monthly"
 TABLE_READY_TIMEOUT_SECONDS = 30.0
 TABLE_READY_SLEEP_SECONDS = 0.5
 TABLE_READY_MAX_ATTEMPTS = int(TABLE_READY_TIMEOUT_SECONDS / TABLE_READY_SLEEP_SECONDS)
@@ -121,6 +124,12 @@ class LanceDBStore:
 
     def ensure_derived_tables(self) -> None:
         self.create_derived_tables()
+
+    def ensure_duckdb_extension_downloads_table(self) -> None:
+        self._create_table_ready(
+            DUCKDB_EXTENSION_DOWNLOADS_MONTHLY_TABLE,
+            create_mode="exist_ok",
+        )
 
     def reset_derived_tables(self) -> None:
         for table_name in DERIVED_TABLES:
@@ -317,6 +326,21 @@ class LanceDBStore:
         for row in normalized:
             guidance_id = str(row["guidance_id"]).replace("'", "''")
             table.delete(f"guidance_id = '{guidance_id}'")
+        table.add(normalized, mode="append")
+        return {"inserted": len(normalized), "updated": 0}
+
+    def upsert_duckdb_extension_downloads_monthly(
+        self, rows: list[dict[str, Any]]
+    ) -> dict[str, int]:
+        if not rows:
+            return {"inserted": 0, "updated": 0}
+        normalized = [
+            self._normalize_duckdb_extension_downloads_monthly_row(row) for row in rows
+        ]
+        table = self._open_table(DUCKDB_EXTENSION_DOWNLOADS_MONTHLY_TABLE)
+        for row in normalized:
+            month_start = row["month_start"].isoformat().replace("'", "''")
+            table.delete(f"month_start = DATE '{month_start}'")
         table.add(normalized, mode="append")
         return {"inserted": len(normalized), "updated": 0}
 
@@ -529,6 +553,23 @@ class LanceDBStore:
             "raw_response",
         ):
             normalized[key] = str(normalized.get(key) or "")
+        return normalized
+
+    @staticmethod
+    def _normalize_duckdb_extension_downloads_monthly_row(
+        row: dict[str, Any],
+    ) -> dict[str, Any]:
+        normalized = dict(row)
+        normalized["month_start"] = LanceDBStore._coerce_date(
+            normalized.get("month_start")
+        )
+        normalized["month_label"] = str(normalized.get("month_label") or "")
+        for key in ("core_downloads", "community_downloads", "total_downloads"):
+            normalized[key] = int(normalized.get(key) or 0)
+        normalized["is_partial_month"] = bool(normalized.get("is_partial_month"))
+        normalized["latest_source_update_at"] = LanceDBStore._normalize_timestamp(
+            normalized.get("latest_source_update_at")
+        )
         return normalized
 
     @staticmethod

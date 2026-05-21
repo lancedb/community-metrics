@@ -45,6 +45,16 @@ export type DownloadSnapshotPoint = {
   total: number
 }
 
+export type DuckDBLanceExtensionDownloadPoint = {
+  month_start: string
+  month_label: string
+  core_downloads: number
+  community_downloads: number
+  total_downloads: number
+  is_partial_month: boolean
+  latest_source_update_at: string
+}
+
 export type DashboardEvidenceItem = {
   evidence_id: string
   source_type: string
@@ -133,6 +143,7 @@ export type DashboardResponse = {
   total_stars_sparkline: SparkPoint[]
   last_30d_download_totals: DownloadWindowTotals
   monthly_download_snapshots: DownloadSnapshotPoint[]
+  duckdb_lance_extension_downloads: DuckDBLanceExtensionDownloadPoint[]
   metric_rollups: DashboardMetricRollup[]
   recent_evidence: DashboardEvidenceItem[]
   signal_candidates: DashboardSignalCandidate[]

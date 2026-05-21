@@ -8,6 +8,7 @@ import type {
   DashboardResponse,
   DashboardSignalCandidate,
   DashboardSignalGuidance,
+  DuckDBLanceExtensionDownloadPoint,
   DownloadSnapshotPoint,
   DownloadWindowTotals,
   SparkPoint,
@@ -19,6 +20,7 @@ const MAX_DAYS = 730
 const DOWNLOAD_SNAPSHOT_CUTOFF = '2025-11-30'
 const DOWNLOAD_DAILY_START = '2025-12-01'
 const SYNTHETIC_NOVEMBER_2025 = '2025-11-30'
+const DUCKDB_EXTENSION_DOWNLOADS_START = '2026-01-01'
 const DOWNLOAD_SNAPSHOT_MONTH_ENDS = [
   '2024-09-30',
   '2024-10-31',
@@ -190,6 +192,15 @@ function coerceNumber(value: unknown): number {
     return Number.isFinite(parsed) ? parsed : 0
   }
   return 0
+}
+
+function coerceBool(value: unknown): boolean {
+  if (typeof value === 'boolean') return value
+  if (typeof value === 'number') return value !== 0
+  if (typeof value === 'string') {
+    return ['1', 'true', 't', 'yes', 'y'].includes(value.trim().toLowerCase())
+  }
+  return Boolean(value)
 }
 
 function coerceList(value: unknown): string[] {
@@ -740,6 +751,7 @@ async function fetchDerivedDashboardData(): Promise<{
   recentEvidence: DashboardEvidenceItem[]
   signalCandidates: DashboardSignalCandidate[]
   signalGuidance: DashboardSignalGuidance[]
+  duckdbLanceExtensionDownloads: DuckDBLanceExtensionDownloadPoint[]
 }> {
   const apiKey = requireEnv('LANCEDB_API_KEY')
   const hostOverride = requireEnv('LANCEDB_HOST_OVERRIDE')
@@ -832,6 +844,19 @@ async function fetchDerivedDashboardData(): Promise<{
       'engineering_relevance',
       'confidence',
       'citations',
+    ],
+    limit: 100,
+  })
+
+  const duckdbExtensionRows = await queryOptionalTable(db, 'duckdb_lance_extension_downloads_monthly', {
+    columns: [
+      'month_start',
+      'month_label',
+      'core_downloads',
+      'community_downloads',
+      'total_downloads',
+      'is_partial_month',
+      'latest_source_update_at',
     ],
     limit: 100,
   })
@@ -933,7 +958,26 @@ async function fetchDerivedDashboardData(): Promise<{
     .sort((a, b) => b.generated_at.localeCompare(a.generated_at))
     .slice(0, 20)
 
-  return { metricRollups, recentEvidence, signalCandidates, signalGuidance }
+  const duckdbLanceExtensionDownloads = duckdbExtensionRows
+    .map((row) => ({
+      month_start: dayKey(row.month_start),
+      month_label: String(row.month_label ?? ''),
+      core_downloads: coerceNumber(row.core_downloads),
+      community_downloads: coerceNumber(row.community_downloads),
+      total_downloads: coerceNumber(row.total_downloads),
+      is_partial_month: coerceBool(row.is_partial_month),
+      latest_source_update_at: coerceIsoDateTime(row.latest_source_update_at),
+    }))
+    .filter((row) => row.month_start >= DUCKDB_EXTENSION_DOWNLOADS_START)
+    .sort((a, b) => a.month_start.localeCompare(b.month_start))
+
+  return {
+    metricRollups,
+    recentEvidence,
+    signalCandidates,
+    signalGuidance,
+    duckdbLanceExtensionDownloads,
+  }
 }
 
 export async function fetchDownloadTotalsForWindow(
@@ -1012,6 +1056,7 @@ export async function buildDashboardData(rawDays: number | null | undefined): Pr
         lancedb: 0,
       },
       monthly_download_snapshots: [],
+      duckdb_lance_extension_downloads: [],
       metric_rollups: [],
       recent_evidence: [],
       signal_candidates: [],
@@ -1106,6 +1151,7 @@ export async function buildDashboardData(rawDays: number | null | undefined): Pr
     total_stars_sparkline: stars.sparkline,
     last_30d_download_totals: last30dDownloadTotals(statsRows),
     monthly_download_snapshots: buildMonthlyDownloadSnapshots(metricsRows, statsRows, latestDay),
+    duckdb_lance_extension_downloads: derived.duckdbLanceExtensionDownloads,
     metric_rollups: derived.metricRollups,
     recent_evidence: derived.recentEvidence,
     signal_candidates: derived.signalCandidates,
