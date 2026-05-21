@@ -69,7 +69,7 @@ def test_build_metric_rollups_computes_windows_and_sdk_share() -> None:
     assert any(row["window"] == "15d" for row in rollups)
 
 
-def test_build_signal_candidates_detects_spike_and_social_burst() -> None:
+def test_build_signal_candidates_detects_metric_signals_without_social_burst() -> None:
     rollups = [
         {
             "metric_id": "downloads:lancedb:nodejs",
@@ -105,7 +105,7 @@ def test_build_signal_candidates_detects_spike_and_social_burst() -> None:
 
     assert "download_spike" in signal_types
     assert "sdk_share_shift" in signal_types
-    assert "social_mention_burst" in signal_types
+    assert "social_mention_burst" not in signal_types
 
 
 def test_run_uses_derived_tables_without_seeding_source_metrics(monkeypatch) -> None:
