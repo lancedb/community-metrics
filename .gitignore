@@ -229,3 +229,4 @@ data/community_metrics.lancedb/
 # Keep Next.js dashboard server helpers tracked.
 !src/dashboard/src/lib/
 !src/dashboard/src/lib/**
+.claude
