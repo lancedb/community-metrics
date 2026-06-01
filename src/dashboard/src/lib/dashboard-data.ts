@@ -533,13 +533,18 @@ function last30dDownloadTotals(rows: Row[]): DashboardResponse['last_30d_downloa
   return downloadTotalsForWindow(rows, windowStartIso, windowEndIso)
 }
 
-function completedMonthEndBefore(day: Date): string {
+function completedMonthEndOnOrBefore(day: Date): string {
+  const currentMonthEnd = monthEndIso(toIsoDay(day))
+  if (toIsoDay(day) === currentMonthEnd) {
+    return currentMonthEnd
+  }
+
   const monthStart = new Date(Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), 1))
   return toIsoDay(shiftDays(monthStart, -1))
 }
 
 function downloadSnapshotTargetDates(latestDay: Date): string[] {
-  const finalMonthEnd = completedMonthEndBefore(latestDay)
+  const finalMonthEnd = completedMonthEndOnOrBefore(latestDay)
   const targetDates = DOWNLOAD_SNAPSHOT_MONTH_ENDS.filter((day) => day <= finalMonthEnd)
 
   let firstOfMonth = new Date(Date.UTC(2026, 1, 1))
