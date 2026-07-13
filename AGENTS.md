@@ -61,6 +61,7 @@ When making pipeline changes, preserve these behaviors:
 ## Maintainer Guardrails
 
 - Always treat LanceDB as using a remote database on an Enterprise cluster. Local LanceDB databse support isn't planned for this application.
+- Treat a day omitted by a package-registry response as unavailable, not as zero downloads. Preserve bounded retry/backoff for 429 and transient 5xx responses, and keep the descriptive crates.io user agent required by its data-access policy.
 - Keep the default dashboard history window wide enough to surface the seeded month-end download snapshots.
 - Keep docs in sync when pipeline contracts change (`README.md`, `LOCAL.md`, `AGENTS.md` in the same PR).
 - Preserve API endpoints consumed by the frontend unless an explicit breaking change is intended and documented.

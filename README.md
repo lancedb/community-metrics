@@ -96,6 +96,12 @@ For ad-hoc correction windows:
 uv run python -m community_metrics.jobs.daily_refresh --lookback-days 7
 ```
 
+Registry requests use a descriptive user agent plus bounded retry/backoff for HTTP
+429 and transient 5xx responses. If an otherwise successful registry response omits
+a target day, the refresh leaves that `(metric_id, period_end)` absent instead of
+writing a synthetic zero; the next incremental run retries it. After a collection
+outage or suspected stale zero, recompute a bounded window with `--lookback-days`.
+
 One-time star-history backfill for newly added GitHub repos:
 
 ```bash

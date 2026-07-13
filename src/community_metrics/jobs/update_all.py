@@ -130,7 +130,7 @@ def _api_rows_for_window(
                 daily_totals = {parse_iso_date(r.day): r.downloads for r in source_rows}
 
             for day in target_days:
-                if day not in daily_totals and source == "crates":
+                if day not in daily_totals:
                     continue
                 rows.append(
                     to_daily_stat_row(
@@ -139,7 +139,7 @@ def _api_rows_for_window(
                         observed_at=datetime.combine(
                             day, time.min, tzinfo=timezone.utc
                         ),
-                        value=daily_totals.get(day, 0),
+                        value=daily_totals[day],
                         provenance="recomputed",
                         source_window="1d",
                         ingestion_run_id=run_id,

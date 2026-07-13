@@ -50,12 +50,14 @@ def run(*, run_id: str | None = None, lookback_days: int = 0) -> dict[str, int]:
                     parse_iso_date(row.day): row.downloads for row in daily_rows
                 }
                 for day in target_days:
+                    if day not in daily_totals:
+                        continue
                     rows.append(
                         to_daily_stat_row(
                             metric_id=metric_id,
                             day=day,
                             observed_at=observed_at,
-                            value=daily_totals.get(day, 0),
+                            value=daily_totals[day],
                             provenance="api_daily",
                             source_window="1d",
                             ingestion_run_id=run_ctx.run_id,
@@ -73,12 +75,14 @@ def run(*, run_id: str | None = None, lookback_days: int = 0) -> dict[str, int]:
                     parse_iso_date(row.day): row.downloads for row in daily_rows
                 }
                 for day in target_days:
+                    if day not in daily_totals:
+                        continue
                     rows.append(
                         to_daily_stat_row(
                             metric_id=metric_id,
                             day=day,
                             observed_at=observed_at,
-                            value=daily_totals.get(day, 0),
+                            value=daily_totals[day],
                             provenance="api_daily",
                             source_window="1d",
                             ingestion_run_id=run_ctx.run_id,

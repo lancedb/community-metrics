@@ -66,6 +66,12 @@ Optional correction window:
 uv run python -m community_metrics.jobs.daily_refresh --lookback-days 7
 ```
 
+Download-source clients retry HTTP 429 and transient 5xx responses with backoff and
+identify this collector with a descriptive user agent (required by crates.io). A day
+omitted by a successful registry response is left unwritten, not converted to zero,
+so a later incremental run can retry it. Use a bounded `--lookback-days` refresh to
+repair an outage window or previously recorded stale zeroes.
+
 Refresh derived dashboard data after source data changes:
 
 ```bash
