@@ -153,6 +153,56 @@ def test_update_daily_downloads_logs_metric_errors(monkeypatch, capsys) -> None:
     assert fake_store.history_rows[-1]["status"] == "partial"
 
 
+def test_update_daily_downloads_does_not_turn_missing_api_days_into_zeroes(
+    monkeypatch,
+) -> None:
+    fake_store = _FakeStore(
+        {
+            "downloads:lance:python": [{"period_end": "2026-02-10"}],
+            "downloads:lancedb:nodejs": [{"period_end": "2026-02-10"}],
+        }
+    )
+    monkeypatch.setattr(update_daily_downloads, "build_store", lambda: fake_store)
+    monkeypatch.setattr(
+        update_daily_downloads,
+        "DOWNLOAD_METRIC_SOURCE_MAP",
+        {
+            "downloads:lance:python": ("pypi", "pylance"),
+            "downloads:lancedb:nodejs": ("npm", "@lancedb/lancedb"),
+        },
+    )
+    monkeypatch.setattr(
+        update_daily_downloads,
+        "latest_completed_day",
+        lambda: date(2026, 2, 12),
+    )
+
+    class _PyPI:
+        def fetch_daily_downloads(self, package):
+            return [_DailyRow("2026-02-11", 10)]
+
+    class _Npm:
+        def fetch_daily_downloads(self, package, start, end):
+            return [_DailyRow("2026-02-11", 20)]
+
+    class _Crates:
+        def fetch_daily_downloads(self, crate_name):
+            raise AssertionError("crates client should not be used")
+
+    monkeypatch.setattr(update_daily_downloads, "PyPIStatsClient", _PyPI)
+    monkeypatch.setattr(update_daily_downloads, "NpmDownloadsClient", _Npm)
+    monkeypatch.setattr(update_daily_downloads, "CratesClient", _Crates)
+
+    result = update_daily_downloads.run()
+
+    assert result == {"inserted": 2, "updated": 0, "errors": 0}
+    assert [row["period_end"] for row in fake_store.upserted_stats_rows] == [
+        "2026-02-11",
+        "2026-02-11",
+    ]
+    assert [row["value"] for row in fake_store.upserted_stats_rows] == [10, 20]
+
+
 def test_update_daily_stars_uses_snapshot_for_routine_run(monkeypatch) -> None:
     fake_store = _FakeStore(
         {
