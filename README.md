@@ -72,6 +72,12 @@ Daily row semantics in `stats`:
 - download `source_window`: `1d`
 - star `source_window`: `cumulative_snapshot`
 
+Missing and pending data:
+- A day a registry omits is unavailable, not zero, and is not written.
+- npm returns an explicit `0` for days it hasn't finished counting. A `0` within the last 3 days is treated as unavailable, so the next run fetches that day again.
+- If the stargazer backfill fails, the current star count is written for the latest day only; earlier days in the lookback window are left unchanged.
+- `update_daily_downloads`, `update_daily_stars` and `daily_refresh` exit with status 1 when any metric fails (the `history` row is `partial`), so schedulers see the failure.
+
 ## Ingestion Jobs (EC2 / Private Host)
 
 All writes happen directly through `LanceDBStore`.
