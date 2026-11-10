@@ -17,6 +17,10 @@ from community_metrics.sources.npm_client import NpmDownloadsClient
 from community_metrics.sources.pypistats_client import PyPIStatsClient
 from community_metrics.utils.time import latest_completed_day, parse_iso_date
 
+# npm returns an explicit 0 for days it has not finished counting yet. A 0 this
+# recent is treated as unavailable (not stored), so the next run fetches it again.
+NPM_PENDING_ZERO_WINDOW_DAYS = 3
+
 
 def run(*, run_id: str | None = None, lookback_days: int = 0) -> dict[str, int]:
     store = build_store()
@@ -76,6 +80,16 @@ def run(*, run_id: str | None = None, lookback_days: int = 0) -> dict[str, int]:
                 }
                 for day in target_days:
                     if day not in daily_totals:
+                        continue
+                    if (
+                        daily_totals[day] == 0
+                        and (latest_day - day).days < NPM_PENDING_ZERO_WINDOW_DAYS
+                    ):
+                        print(
+                            f"[update_daily_downloads] {metric_id}: npm reported 0 for "
+                            f"{day.isoformat()}; treating as not yet available",
+                            flush=True,
+                        )
                         continue
                     rows.append(
                         to_daily_stat_row(
@@ -152,6 +166,9 @@ def main() -> None:
         "update_daily_downloads complete: "
         f"inserted={result['inserted']} updated={result['updated']} errors={result['errors']}"
     )
+    if result["errors"]:
+        # Non-zero exit so cron/Lambda treat a partial run as a failure.
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

@@ -64,23 +64,28 @@ def run(*, run_id: str | None = None, lookback_days: int = 0) -> dict[str, int]:
                     totals = _daily_cumulative_stars(github, repo, target_days)
                     source_ref = f"github-stargazers:{repo}"
                 except Exception as exc:
+                    # The current star count is only valid for the latest day.
+                    # Writing it to earlier days would overwrite real history.
                     snapshot = github.get_repo_stars(repo)
-                    totals = {day: snapshot for day in target_days}
+                    totals = {target_days[-1]: snapshot}
                     source_ref = f"github:{repo}"
                     error_message = (
-                        f"{metric_id}: stargazer backfill failed ({exc}); fell back to snapshot"
+                        f"{metric_id}: stargazer backfill failed ({exc}); fell back to "
+                        f"snapshot for {target_days[-1].isoformat()} only"
                     )
                     print(f"[update_daily_stars] warning: {error_message}", flush=True)
                     errors.append(error_message)
 
             observed_at = datetime.now(tz=timezone.utc)
             for day in target_days:
+                if day not in totals:
+                    continue
                 rows.append(
                     to_daily_stat_row(
                         metric_id=metric_id,
                         day=day,
                         observed_at=observed_at,
-                        value=totals.get(day, 0),
+                        value=totals[day],
                         provenance="api_daily",
                         source_window="cumulative_snapshot",
                         ingestion_run_id=run_ctx.run_id,
@@ -126,6 +131,9 @@ def main() -> None:
         "update_daily_stars complete: "
         f"inserted={result['inserted']} updated={result['updated']} errors={result['errors']}"
     )
+    if result["errors"]:
+        # Non-zero exit so cron/Lambda treat a partial run as a failure.
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

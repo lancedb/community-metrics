@@ -328,8 +328,12 @@ def test_update_daily_stars_fallback_marks_partial(monkeypatch) -> None:
 
     result = update_daily_stars.run(lookback_days=2)
 
-    assert result == {"inserted": 2, "updated": 0, "errors": 1}
-    assert [row["value"] for row in fake_store.upserted_stats_rows] == [77, 77]
+    # The current snapshot is written to the latest day only; earlier days in
+    # the lookback window are left untouched instead of being flattened.
+    assert result == {"inserted": 1, "updated": 0, "errors": 1}
+    assert [
+        (row["period_end"], row["value"]) for row in fake_store.upserted_stats_rows
+    ] == [("2026-02-12", 77)]
     assert fake_store.history_rows[-1]["status"] == "partial"
     assert "fell back to snapshot" in str(fake_store.history_rows[-1]["error_summary"])
 
@@ -597,3 +601,64 @@ def test_update_all_defaults_to_assume_tables_exist(monkeypatch, capsys) -> None
     assert "create_required_tables" not in fake_store.calls
     assert "seed_metrics" not in fake_store.calls
     assert "assuming tables exist" in capsys.readouterr().out
+
+
+def test_update_daily_downloads_skips_pending_npm_zeros(monkeypatch, capsys) -> None:
+    # Recorded shape of npm's range API before it has finished counting the
+    # latest day: the day is present with an explicit 0.
+    fake_store = _FakeStore(
+        {"downloads:lancedb:nodejs": [{"period_end": "2026-02-01"}]}
+    )
+    monkeypatch.setattr(update_daily_downloads, "build_store", lambda: fake_store)
+    monkeypatch.setattr(
+        update_daily_downloads,
+        "DOWNLOAD_METRIC_SOURCE_MAP",
+        {"downloads:lancedb:nodejs": ("npm", "@lancedb/lancedb")},
+    )
+    monkeypatch.setattr(
+        update_daily_downloads, "latest_completed_day", lambda: date(2026, 2, 12)
+    )
+
+    class _Npm:
+        def fetch_daily_downloads(self, package, start, end):
+            return [
+                _DailyRow("2026-02-02", 0),  # old zero: outside the window, kept
+                _DailyRow("2026-02-11", 88537),
+                _DailyRow("2026-02-12", 0),  # pending: skipped
+            ]
+
+    class _Unused:
+        def fetch_daily_downloads(self, *args, **kwargs):
+            raise AssertionError("client should not be used")
+
+    monkeypatch.setattr(update_daily_downloads, "PyPIStatsClient", _Unused)
+    monkeypatch.setattr(update_daily_downloads, "NpmDownloadsClient", _Npm)
+    monkeypatch.setattr(update_daily_downloads, "CratesClient", _Unused)
+
+    result = update_daily_downloads.run()
+
+    assert result["errors"] == 0
+    assert [
+        (row["period_end"], row["value"]) for row in fake_store.upserted_stats_rows
+    ] == [("2026-02-02", 0), ("2026-02-11", 88537)]
+    assert "treating as not yet available" in capsys.readouterr().out
+
+
+def test_job_mains_exit_nonzero_on_errors(monkeypatch) -> None:
+    import pytest
+
+    from community_metrics.jobs import daily_refresh
+
+    for module in (update_daily_downloads, update_daily_stars, daily_refresh):
+        monkeypatch.setattr("sys.argv", [module.__name__])
+        monkeypatch.setattr(
+            module, "run", lambda **_: {"inserted": 0, "updated": 0, "errors": 1}
+        )
+        with pytest.raises(SystemExit) as excinfo:
+            module.main()
+        assert excinfo.value.code == 1
+
+        monkeypatch.setattr(
+            module, "run", lambda **_: {"inserted": 1, "updated": 0, "errors": 0}
+        )
+        module.main()  # no exit on success

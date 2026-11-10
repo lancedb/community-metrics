@@ -52,6 +52,9 @@ def main() -> None:
         "daily_refresh complete: "
         f"inserted={result['inserted']} updated={result['updated']} errors={result['errors']}"
     )
+    if result["errors"]:
+        # Non-zero exit so cron/Lambda treat a partial run as a failure.
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
