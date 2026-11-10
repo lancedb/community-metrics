@@ -144,6 +144,29 @@ Run monthly DuckDB extension refresh at **10:00 UTC** on the first day of each m
 0 10 1 * * cd /path/to/community-metrics && /usr/bin/env -S bash -lc 'uv run python -m community_metrics.jobs.update_duckdb_extension_downloads >> /var/log/community-metrics/update_duckdb_extension_downloads.log 2>&1'
 ```
 
+### AWS Lambda (container image)
+
+The jobs can also run as a scheduled Lambda built from the repo's `Dockerfile`
+(Python 3.13, locked dependencies from `uv.lock`). The entry point is
+`community_metrics.lambda_handler.handler`, which takes one event per run:
+
+| Event | Runs |
+| --- | --- |
+| `{"job": "daily"}` | `daily_refresh` → `collect_hn_evidence --lookback-days 30` → `derive_dashboard` |
+| `{"job": "generate_signal_guidance", "args": ["--window-days", "7"]}` | weekly guidance |
+| `{"job": "update_duckdb_extension_downloads"}` | monthly DuckDB refresh |
+
+- Each step calls the job's normal CLI `main()`, so defaults match the commands above.
+- In a chain, every step runs even if an earlier one fails; the invocation then fails and names the failed steps.
+- Only the jobs listed in `ALLOWED_JOBS` can run. Destructive/backfill jobs such as `bootstrap_tables` and `update_all` are rejected.
+- If `SECRET_ID` is set, that Secrets Manager JSON secret is loaded into the environment before any job runs. Otherwise the normal environment / `.env` is used.
+
+Run the handler locally without Docker (this runs the real jobs against the configured database):
+
+```bash
+uv run python -m community_metrics.lambda_handler '{"job": "daily"}'
+```
+
 ## Frontend (Next.js + Vercel)
 
 The dashboard lives in `src/dashboard` and fetches:

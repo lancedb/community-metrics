@@ -64,6 +64,7 @@ When making pipeline changes, preserve these behaviors:
 - Treat a day omitted by a package-registry response as unavailable, not as zero downloads. Treat npm's explicit `0` for a day within the trailing pending window (`NPM_PENDING_ZERO_WINDOW_DAYS`) the same way. Never write a star snapshot to any day other than the latest one. Preserve bounded retry/backoff for 429 and transient 5xx responses, and keep the descriptive crates.io user agent required by its data-access policy.
 - Keep the default dashboard history window wide enough to surface the seeded month-end download snapshots.
 - Daily ingestion jobs must exit non-zero when any metric fails, so schedulers and alerts see partial runs.
+- `lambda_handler.py` must load secrets into the environment before importing any module that imports `community_metrics.config` (it reads env vars at import time), and must keep destructive jobs (`bootstrap_tables`, `update_all`, `seed_from_csv`) out of `ALLOWED_JOBS`.
 - Keep docs in sync when pipeline contracts change (`README.md`, `LOCAL.md`, `AGENTS.md` in the same PR).
 - Preserve API endpoints consumed by the frontend unless an explicit breaking change is intended and documented.
 
