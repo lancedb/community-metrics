@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { DuckDBLanceExtensionDownloadPoint } from '../types'
+import { ChartDataTable } from './ChartDataTable'
 
 type DuckDBExtensionDownloadsWidgetProps = {
   points: DuckDBLanceExtensionDownloadPoint[]
@@ -101,6 +102,7 @@ function CombinedChart({ points }: { points: DuckDBLanceExtensionDownloadPoint[]
         preserveAspectRatio="none"
         role="img"
         aria-label="Community and core monthly DuckDB lance extension downloads"
+        data-testid="chart"
         onMouseLeave={() => setHoverIndex(null)}
         onMouseMove={(event) => {
           const rect = event.currentTarget.getBoundingClientRect()
@@ -213,6 +215,16 @@ export function DuckDBExtensionDownloadsWidget({ points }: DuckDBExtensionDownlo
       </div>
 
       <CombinedChart points={points} />
+      <ChartDataTable
+        caption="DuckDB lance extension downloads by month"
+        columns={[
+          { label: 'Month', value: (point: DuckDBLanceExtensionDownloadPoint) => point.month_label },
+          { label: 'Community', value: (point: DuckDBLanceExtensionDownloadPoint) => point.community_downloads },
+          { label: 'Core', value: (point: DuckDBLanceExtensionDownloadPoint) => point.core_downloads },
+          { label: 'Total', value: (point: DuckDBLanceExtensionDownloadPoint) => point.total_downloads },
+        ]}
+        rows={points}
+      />
     </section>
   )
 }

@@ -209,6 +209,21 @@ Google OAuth app setup must include this callback URI:
 http://127.0.0.1:3000/api/auth/callback/google
 ```
 
+### UI tests
+
+Playwright tests in `src/dashboard/tests` run the real app with auth off and a mocked
+`/api/v1/dashboard/daily` (fixture: `tests/fixtures/dashboard.ts`), so they need no LanceDB
+or Google credentials. They check each section, card, chart point and value, not pixels,
+so a redesign must keep them passing. CI runs them on every PR that touches the dashboard
+(`.github/workflows/dashboard-ui-tests.yml`).
+
+```bash
+cd src/dashboard
+npx playwright install chromium   # once
+npm run test:ui                   # desktop + mobile viewports
+npm run typecheck
+```
+
 ### Vercel env vars
 
 Set these in the Vercel project:

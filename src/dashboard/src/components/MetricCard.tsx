@@ -92,7 +92,11 @@ export function MetricCard({ metric }: MetricCardProps) {
       {metric.metric_family === 'downloads' && (
         <p className="mb-2 text-[11px] text-muted">Last full month total</p>
       )}
-      <TrendChart points={metric.sparkline} showMarkers={metric.metric_family === 'downloads'} />
+      <TrendChart
+        points={metric.sparkline}
+        showMarkers={metric.metric_family === 'downloads'}
+        label={`${titleForMetric(metric)} ${metric.metric_family === 'downloads' ? 'downloads by month' : 'stars over time'}`}
+      />
     </article>
   )
 }

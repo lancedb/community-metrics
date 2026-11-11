@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { DownloadSnapshotPoint } from '../types'
+import { ChartDataTable } from './ChartDataTable'
 
 type DownloadSnapshotChartProps = {
   points: DownloadSnapshotPoint[]
@@ -164,6 +165,7 @@ export function DownloadSnapshotChart({ points }: DownloadSnapshotChartProps) {
           viewBox={`0 0 ${width} ${height}`}
           role="img"
           aria-label="Area chart of monthly total download snapshots"
+          data-testid="chart"
           onMouseLeave={() => setHoverIndex(null)}
           onMouseMove={(event) => {
             const rect = event.currentTarget.getBoundingClientRect()
@@ -235,6 +237,14 @@ export function DownloadSnapshotChart({ points }: DownloadSnapshotChartProps) {
           )}
         </svg>
       </div>
+      <ChartDataTable
+        caption="Monthly download snapshots"
+        columns={[
+          { label: 'Period end', value: (point: DownloadSnapshotPoint) => point.period_end },
+          { label: 'Total', value: (point: DownloadSnapshotPoint) => point.total },
+        ]}
+        rows={points}
+      />
     </section>
   )
 }

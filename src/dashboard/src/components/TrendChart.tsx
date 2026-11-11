@@ -1,9 +1,12 @@
 import { useMemo, useState } from 'react'
 import type { SparkPoint } from '../types'
+import { ChartDataTable } from './ChartDataTable'
 
 type TrendChartProps = {
   points: SparkPoint[]
   showMarkers?: boolean
+  /** Names the chart's data table, e.g. "Python downloads by month". */
+  label: string
 }
 
 type ChartPoint = {
@@ -27,7 +30,7 @@ function formatDay(input: string): string {
   })
 }
 
-export function TrendChart({ points, showMarkers = true }: TrendChartProps) {
+export function TrendChart({ points, showMarkers = true, label }: TrendChartProps) {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null)
 
   const width = 220
@@ -61,10 +64,22 @@ export function TrendChart({ points, showMarkers = true }: TrendChartProps) {
     }
   }, [points, plotHeight, plotWidth])
 
+  const dataTable = (
+    <ChartDataTable
+      caption={label}
+      columns={[
+        { label: 'Period end', value: (point: SparkPoint) => point.period_end },
+        { label: 'Value', value: (point: SparkPoint) => point.value },
+      ]}
+      rows={points}
+    />
+  )
+
   if (!prepared) {
     return (
       <div className="space-y-2">
         <div className="rounded-md bg-brand-soft p-3 text-[11px] text-muted">Need at least 2 points for trend</div>
+        {dataTable}
       </div>
     )
   }
@@ -95,6 +110,7 @@ export function TrendChart({ points, showMarkers = true }: TrendChartProps) {
           setHoverIndex(clamped)
         }}
         aria-label="Interactive trend chart"
+        data-testid="chart"
       >
         <polyline
           fill="none"
@@ -128,6 +144,7 @@ export function TrendChart({ points, showMarkers = true }: TrendChartProps) {
         <span>{prepared.startLabel}</span>
         <span>{prepared.endLabel}</span>
       </div>
+      {dataTable}
     </div>
   )
 }
