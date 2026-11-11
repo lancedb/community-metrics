@@ -151,6 +151,21 @@ test.describe('charts tab', () => {
     expect(pageHeight).toBeLessThanOrEqual(Math.ceil(footerBottom) + 1)
   })
 
+  test('long daily charts label the x-axis with the year', async ({ page }) => {
+    const dashboard = dashboardFixture()
+    const start = Date.UTC(2024, 10, 10)
+    dashboard.total_stars_sparkline = Array.from({ length: 730 }, (_, day) => {
+      const date = new Date(start + day * 86_400_000).toISOString().slice(0, 10)
+      return { period_start: date, period_end: date, value: 10_000 + day * 12 }
+    })
+    await openDashboard(page, { dashboard })
+    const card = section(page, 'Star Histories').locator('article', { hasText: 'Total Stars' })
+    const tickLabels = card.locator('[data-testid="chart"] .recharts-xAxis-tick-labels text')
+    await expect.poll(() => tickLabels.count()).toBeGreaterThan(1)
+    const ticks = await tickLabels.allTextContents()
+    for (const tick of ticks) expect(tick).toMatch(/^[A-Z][a-z]{2} '\d{2}$/)
+  })
+
   test('sections appear in order', async ({ page }) => {
     await openDashboard(page)
     const titles = [

@@ -23,7 +23,13 @@ type TrendChartProps = {
 export function TrendChart({ points, label, granularity, color = 'var(--chart-1)', seriesName }: TrendChartProps) {
   const gradientId = `trend-${useId().replace(/:/g, '')}`
   const config = { value: { label: seriesName, color } } satisfies ChartConfig
-  const tickLabel = granularity === 'month' ? formatMonthTick : formatShortDay
+  // Daily series spanning more than ~6 months cross a year, so "Dec 12" alone is ambiguous:
+  // label those by month and year ("Dec '25") instead.
+  const spanDays =
+    points.length > 1
+      ? (Date.parse(points[points.length - 1].period_end) - Date.parse(points[0].period_end)) / 86_400_000
+      : 0
+  const tickLabel = granularity === 'month' || spanDays > 183 ? formatMonthTick : formatShortDay
   // Compact labels ("7.3K") collapse a narrow range like 7,270-7,279 into one repeated
   // label, so use full numbers unless the series spans a wide range.
   const values = points.map((point) => point.value)
