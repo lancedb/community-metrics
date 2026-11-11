@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <title>LanceDB Community Metrics</title>
+  <rect width="64" height="64" rx="14" fill="#14110e"/>
+  <!-- little bars cheering on their friend -->
+  <rect x="9" y="38" width="11" height="17" rx="4" fill="#f4a58a"/>
+  <rect x="44" y="30" width="11" height="25" rx="4" fill="#d4592f"/>
+  <!-- the happy tall bar -->
+  <rect x="22" y="15" width="20" height="40" rx="7" fill="#e97852"/>
+  <circle cx="28" cy="27" r="2.6" fill="#14110e"/>
+  <circle cx="36" cy="27" r="2.6" fill="#14110e"/>
+  <circle cx="28.9" cy="26.1" r="0.9" fill="#fff"/>
+  <circle cx="36.9" cy="26.1" r="0.9" fill="#fff"/>
+  <path d="M27.5 33 Q32 37.5 36.5 33" fill="none" stroke="#14110e" stroke-width="2.4" stroke-linecap="round"/>
+  <circle cx="25.5" cy="32" r="1.8" fill="#f6c2ab" opacity="0.9"/>
+  <circle cx="38.5" cy="32" r="1.8" fill="#f6c2ab" opacity="0.9"/>
+  <!-- sparkle -->
+  <path d="M51 8 L52.6 12.4 L57 14 L52.6 15.6 L51 20 L49.4 15.6 L45 14 L49.4 12.4 Z" fill="#f0e7dc"/>
+</svg>
