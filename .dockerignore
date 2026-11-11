@@ -17,3 +17,5 @@ skills
 data
 archive
 *.md
+infra
+cdk.out

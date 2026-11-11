@@ -230,3 +230,5 @@ data/community_metrics.lancedb/
 !src/dashboard/src/lib/
 !src/dashboard/src/lib/**
 .claude
+# CDK
+infra/cdk.out/
