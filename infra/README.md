@@ -21,14 +21,14 @@ hand from the Actions tab. It runs the tests, builds the image on an arm64 runne
 
 The workflow signs in to AWS with OIDC as `community-metrics-github-deploy`. That role can
 only be assumed by this repo's workflows on `refs/heads/main`, and it can only assume the CDK
-bootstrap roles (`cdk-hnb659fds-*`).
+bootstrap roles in us-east-2 (`cdk-hnb659fds-*-054483968661-us-east-2`).
 
 ## One-time setup (already done once per account; listed for rebuilds)
 
 1. CDK bootstrap: `npx aws-cdk bootstrap aws://054483968661/us-east-2`.
 2. IAM role `community-metrics-github-deploy`, trusted by the GitHub OIDC provider
    `token.actions.githubusercontent.com` with `sub = repo:lancedb/community-metrics:ref:refs/heads/main`,
-   allowed only `sts:AssumeRole` on `arn:aws:iam::054483968661:role/cdk-hnb659fds-*`.
+   allowed only `sts:AssumeRole` on `arn:aws:iam::054483968661:role/cdk-hnb659fds-*-054483968661-us-east-2` (us-east-2 copies only).
 3. After the first deploy:
    - Subscribe alert emails to the `community-metrics-alerts` SNS topic (kept out of code
      because this repo is public). Each address must confirm the email.
