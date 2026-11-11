@@ -18,7 +18,6 @@ import aws_cdk.aws_scheduler as scheduler
 import aws_cdk.aws_scheduler_targets as targets
 import aws_cdk.aws_secretsmanager as secretsmanager
 import aws_cdk.aws_sns as sns
-import aws_cdk.aws_sns_subscriptions as subs
 from aws_cdk import Duration, RemovalPolicy, Stack
 from constructs import Construct
 
@@ -48,7 +47,6 @@ class JobsStack(Stack):
         construct_id: str,
         *,
         secret_name: str,
-        alert_emails: list[str],
         schedules_enabled: bool = True,
         **kwargs,
     ) -> None:
@@ -114,9 +112,14 @@ class JobsStack(Stack):
             )
 
         # The handler raises when any step fails, so every failed run counts as an error.
-        topic = sns.Topic(self, "AlertsTopic", display_name="community-metrics alerts")
-        for email in alert_emails:
-            topic.add_subscription(subs.EmailSubscription(email))
+        # Email subscriptions are added outside the stack so addresses stay out of this
+        # public repo (see infra/README.md).
+        topic = sns.Topic(
+            self,
+            "AlertsTopic",
+            topic_name="community-metrics-alerts",
+            display_name="community-metrics alerts",
+        )
 
         alarm = cloudwatch.Alarm(
             self,

@@ -16,8 +16,7 @@ stack = JobsStack(
     app,
     "CommunityMetricsJobs",
     secret_name=_context("secretName", "community-metrics/prod"),
-    alert_emails=[e.strip() for e in _context("alertEmails").split(",") if e.strip()],
-    # Off until the secret is filled in and a manual invoke succeeds.
+    # Set in cdk.json. Off until the secret is filled in and a manual run succeeds.
     schedules_enabled=_context("schedulesEnabled", "false").lower() == "true",
     env=cdk.Environment(
         account=os.environ.get("CDK_DEFAULT_ACCOUNT"),

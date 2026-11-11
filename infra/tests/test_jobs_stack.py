@@ -10,7 +10,6 @@ def _template(**overrides) -> Template:
     app = cdk.App()
     kwargs = {
         "secret_name": "community-metrics/test",
-        "alert_emails": ["alerts@example.com"],
         "schedules_enabled": True,
     } | overrides
     return Template.from_stack(JobsStack(app, "Test", **kwargs))
@@ -88,15 +87,15 @@ def test_schedules_can_be_created_disabled():
     assert {s["Properties"]["State"] for s in schedules.values()} == {"DISABLED"}
 
 
-def test_errors_alarm_emails_subscribers(template):
+def test_errors_alarm_notifies_topic_without_hardcoded_emails(template):
     template.has_resource_properties(
         "AWS::CloudWatch::Alarm",
         {"MetricName": "Errors", "Threshold": 1, "AlarmActions": Match.any_value()},
     )
     template.has_resource_properties(
-        "AWS::SNS::Subscription",
-        {"Protocol": "email", "Endpoint": "alerts@example.com"},
+        "AWS::SNS::Topic", {"TopicName": "community-metrics-alerts"}
     )
+    template.resource_count_is("AWS::SNS::Subscription", 0)
 
 
 def test_logs_kept_90_days(template):
@@ -105,3 +104,13 @@ def test_logs_kept_90_days(template):
 
 def _as_list(value):
     return value if isinstance(value, list) else [value]
+
+
+def test_cdk_json_keeps_schedules_off_by_default():
+    import json
+    from pathlib import Path
+
+    cdk_json = json.loads(
+        (Path(__file__).resolve().parents[1] / "cdk.json").read_text()
+    )
+    assert cdk_json["context"]["schedulesEnabled"] is False

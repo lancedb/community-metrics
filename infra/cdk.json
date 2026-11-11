@@ -5,6 +5,7 @@
     "exclude": ["README.md", "cdk*.json", "tests", "**/__pycache__", ".venv"]
   },
   "context": {
+    "schedulesEnabled": false,
     "@aws-cdk/aws-lambda:recognizeLayerVersion": true,
     "@aws-cdk/core:target-partitions": ["aws"]
   }
