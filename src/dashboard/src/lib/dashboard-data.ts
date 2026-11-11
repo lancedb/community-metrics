@@ -1,5 +1,7 @@
 import * as lancedb from '@lancedb/lancedb'
 
+import { cached } from './server-cache'
+
 import type {
   DashboardEvidenceItem,
   DashboardGuidanceCitation,
@@ -15,6 +17,8 @@ import type {
 } from '@/types'
 
 const ENTERPRISE_URI = 'db://community-metrics'
+// Source data changes once a day, so a few minutes of reuse is invisible to readers.
+const CACHE_TTL_MS = 5 * 60 * 1000
 const DEFAULT_DAYS = 730
 const MAX_DAYS = 730
 const DOWNLOAD_SNAPSHOT_CUTOFF = '2025-11-30'
@@ -687,36 +691,60 @@ async function queryRows(table: any, options: { where?: string; columns?: string
   return rows as Row[]
 }
 
+// Each connect/openTable is a network round trip to LanceDB Enterprise, so reuse the
+// connection and table handles across requests. A failed attempt is forgotten so the
+// next request retries.
+let connection: Promise<any> | null = null
+const tableHandles = new Map<string, Promise<any>>()
+
+function getDb(): Promise<any> {
+  if (!connection) {
+    const apiKey = requireEnv('LANCEDB_API_KEY')
+    const hostOverride = requireEnv('LANCEDB_HOST_OVERRIDE')
+    const region = (process.env.LANCEDB_REGION ?? 'us-east-1').trim() || 'us-east-1'
+    const attempt = lancedb.connect(ENTERPRISE_URI, { apiKey, hostOverride, region })
+    connection = attempt
+    attempt.catch(() => {
+      if (connection === attempt) connection = null
+    })
+  }
+  return connection
+}
+
+function openTable(tableName: string): Promise<any> {
+  let handle = tableHandles.get(tableName)
+  if (!handle) {
+    const attempt = getDb().then((db) => db.openTable(tableName))
+    handle = attempt
+    tableHandles.set(tableName, attempt)
+    attempt.catch(() => {
+      if (tableHandles.get(tableName) === attempt) tableHandles.delete(tableName)
+    })
+  }
+  return handle
+}
+
 async function queryOptionalTable(
-  db: any,
   tableName: string,
   options: { where?: string; columns?: string[]; limit?: number },
 ): Promise<Row[]> {
   try {
-    const table = await db.openTable(tableName)
-    return await queryRows(table, options)
+    return await queryRows(await openTable(tableName), options)
   } catch {
     return []
   }
 }
 
 async function fetchMetricsAndStats(days: number): Promise<{ metricsRows: MetricDef[]; statsRows: Row[]; latestDay: Date }> {
-  const apiKey = requireEnv('LANCEDB_API_KEY')
-  const hostOverride = requireEnv('LANCEDB_HOST_OVERRIDE')
-  const region = (process.env.LANCEDB_REGION ?? 'us-east-1').trim() || 'us-east-1'
-
-  const db = await lancedb.connect(ENTERPRISE_URI, {
-    apiKey,
-    hostOverride,
-    region,
-  })
+  // Open stats while metrics is read; the stats query needs the metric ids.
+  const statsTablePromise = openTable('stats')
+  statsTablePromise.catch(() => {}) // awaited below; avoid an unhandled rejection meanwhile
 
   const latestDay = latestCompletedDay()
   const statsStartIso = toIsoDay(shiftDays(latestDay, -(days - 1)))
   const statsEndIso = toIsoDay(latestDay)
 
-  const metricsTable = await db.openTable('metrics')
-  const metricsRows = (await queryRows(metricsTable, {
+  const metricsRows = (await queryRows(await openTable('metrics'), {
     columns: [
       'metric_id',
       'metric_family',
@@ -740,8 +768,7 @@ async function fetchMetricsAndStats(days: number): Promise<{ metricsRows: Metric
     `metric_id IN (${idsClause}) AND period_end >= ${sqlQuote(statsStartIso)} ` +
     `AND period_end <= ${sqlQuote(statsEndIso)}`
 
-  const statsTable = await db.openTable('stats')
-  const statsRows = await queryRows(statsTable, {
+  const statsRows = await queryRows(await statsTablePromise, {
     columns: [
       'metric_id',
       'period_start',
@@ -764,17 +791,9 @@ async function fetchDerivedDashboardData(): Promise<{
   signalGuidance: DashboardSignalGuidance[]
   duckdbLanceExtensionDownloads: DuckDBLanceExtensionDownloadPoint[]
 }> {
-  const apiKey = requireEnv('LANCEDB_API_KEY')
-  const hostOverride = requireEnv('LANCEDB_HOST_OVERRIDE')
-  const region = (process.env.LANCEDB_REGION ?? 'us-east-1').trim() || 'us-east-1'
-
-  const db = await lancedb.connect(ENTERPRISE_URI, {
-    apiKey,
-    hostOverride,
-    region,
-  })
-
-  const rollupRows = await queryOptionalTable(db, 'dashboard_metric_rollups', {
+  // The five derived tables are independent, so read them all at once.
+  const [rollupRows, evidenceRows, signalRows, guidanceRows, duckdbExtensionRows] = await Promise.all([
+    queryOptionalTable('dashboard_metric_rollups', {
     columns: [
       'rollup_id',
       'metric_id',
@@ -796,9 +815,8 @@ async function fetchDerivedDashboardData(): Promise<{
       'updated_at',
     ],
     limit: 500,
-  })
-
-  const evidenceRows = await queryOptionalTable(db, 'evidence_items', {
+  }),
+    queryOptionalTable('evidence_items', {
     columns: [
       'evidence_id',
       'source_type',
@@ -816,9 +834,8 @@ async function fetchDerivedDashboardData(): Promise<{
       'evidence_strength',
     ],
     limit: 200,
-  })
-
-  const signalRows = await queryOptionalTable(db, 'signal_candidates', {
+  }),
+    queryOptionalTable('signal_candidates', {
     columns: [
       'signal_id',
       'signal_type',
@@ -834,9 +851,8 @@ async function fetchDerivedDashboardData(): Promise<{
       'suggested_action',
     ],
     limit: 100,
-  })
-
-  const guidanceRows = await queryOptionalTable(db, 'signal_guidance', {
+  }),
+    queryOptionalTable('signal_guidance', {
     columns: [
       'guidance_id',
       'signal_id',
@@ -857,9 +873,8 @@ async function fetchDerivedDashboardData(): Promise<{
       'citations',
     ],
     limit: 500,
-  })
-
-  const duckdbExtensionRows = await queryOptionalTable(db, 'duckdb_lance_extension_downloads_monthly', {
+  }),
+    queryOptionalTable('duckdb_lance_extension_downloads_monthly', {
     columns: [
       'month_start',
       'month_label',
@@ -870,7 +885,8 @@ async function fetchDerivedDashboardData(): Promise<{
       'latest_source_update_at',
     ],
     limit: 100,
-  })
+  }),
+  ])
 
   const windowPriority: Record<string, number> = {
     '7d': 0,
@@ -1019,18 +1035,16 @@ export async function fetchDownloadTotalsForWindow(
   const normalizedStart = windowStartIso <= windowEndIso ? windowStartIso : windowEndIso
   const normalizedEnd = windowStartIso <= windowEndIso ? windowEndIso : windowStartIso
 
-  const apiKey = requireEnv('LANCEDB_API_KEY')
-  const hostOverride = requireEnv('LANCEDB_HOST_OVERRIDE')
-  const region = (process.env.LANCEDB_REGION ?? 'us-east-1').trim() || 'us-east-1'
+  return cached(`window-totals:${normalizedStart}:${normalizedEnd}`, CACHE_TTL_MS, () =>
+    loadDownloadTotalsForWindow(normalizedStart, normalizedEnd),
+  )
+}
 
-  const db = await lancedb.connect(ENTERPRISE_URI, {
-    apiKey,
-    hostOverride,
-    region,
-  })
+async function loadDownloadTotalsForWindow(normalizedStart: string, normalizedEnd: string): Promise<DownloadWindowTotals> {
+  const statsTablePromise = openTable('stats')
+  statsTablePromise.catch(() => {}) // awaited below; avoid an unhandled rejection meanwhile
 
-  const metricsTable = await db.openTable('metrics')
-  const metricRows = await queryRows(metricsTable, {
+  const metricRows = await queryRows(await openTable('metrics'), {
     columns: ['metric_id'],
     where: "is_active = true AND metric_family = 'downloads'",
     limit: 100,
@@ -1050,9 +1064,8 @@ export async function fetchDownloadTotalsForWindow(
     `metric_id IN (${idsClause}) AND period_end >= ${sqlQuote(normalizedStart)} ` +
     `AND period_start <= ${sqlQuote(normalizedEnd)}`
 
-  const statsTable = await db.openTable('stats')
   const rangeDays = overlapDays(normalizedStart, normalizedEnd, normalizedStart, normalizedEnd)
-  const statsRows = await queryRows(statsTable, {
+  const statsRows = await queryRows(await statsTablePromise, {
     columns: ['metric_id', 'period_start', 'period_end', 'value'],
     where,
     limit: Math.max(5000, metricIds.length * (rangeDays + 62)),
@@ -1063,7 +1076,15 @@ export async function fetchDownloadTotalsForWindow(
 
 export async function buildDashboardData(rawDays: number | null | undefined): Promise<DashboardResponse> {
   const days = normalizeDays(rawDays)
-  const { metricsRows, statsRows, latestDay } = await fetchMetricsAndStats(days)
+  return cached(`dashboard:${days}`, CACHE_TTL_MS, () => loadDashboardData(days))
+}
+
+async function loadDashboardData(days: number): Promise<DashboardResponse> {
+  // Source and derived reads are independent, so run them together.
+  const [{ metricsRows, statsRows, latestDay }, derived] = await Promise.all([
+    fetchMetricsAndStats(days),
+    fetchDerivedDashboardData(),
+  ])
 
   if (metricsRows.length === 0) {
     return {
@@ -1164,7 +1185,6 @@ export async function buildDashboardData(rawDays: number | null | undefined): Pr
     }
   }
 
-  const derived = await fetchDerivedDashboardData()
 
   return {
     generated_at: new Date().toISOString(),
