@@ -167,6 +167,9 @@ Run the handler locally without Docker (this runs the real jobs against the conf
 uv run python -m community_metrics.lambda_handler '{"job": "daily"}'
 ```
 
+The AWS resources (Lambda, secret, schedules, failure alerts) are defined as a CDK stack in
+[`infra/`](infra/README.md), which also has the deploy steps.
+
 ## Frontend (Next.js + Vercel)
 
 The dashboard lives in `src/dashboard` and fetches:

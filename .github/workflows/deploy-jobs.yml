@@ -1,0 +1,60 @@
+# Deploys the scheduled-jobs Lambda (infra/) on every merge to main that touches
+# the job code, the image or the stack. AWS access is via OIDC: the role below can
+# only be assumed by this workflow on lancedb/community-metrics refs/heads/main.
+name: Deploy jobs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - Dockerfile
+      - .dockerignore
+      - pyproject.toml
+      - uv.lock
+      - src/community_metrics/**
+      - infra/**
+      - .github/workflows/deploy-jobs.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-jobs
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-2
+  DEPLOY_ROLE_ARN: arn:aws:iam::054483968661:role/community-metrics-github-deploy
+  CDK_CLI_VERSION: 2.1148.0
+
+jobs:
+  deploy:
+    # arm64 runner: the Lambda is arm64, so the image builds natively.
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      - name: Job tests
+        run: uv run pytest -q
+
+      - name: Stack tests
+        working-directory: infra
+        run: uv run pytest -q
+
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ env.DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Deploy
+        working-directory: infra
+        run: npx --yes "aws-cdk@${CDK_CLI_VERSION}" deploy --require-approval never

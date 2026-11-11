@@ -65,6 +65,7 @@ When making pipeline changes, preserve these behaviors:
 - Keep the default dashboard history window wide enough to surface the seeded month-end download snapshots.
 - Daily ingestion jobs must exit non-zero when any metric fails, so schedulers and alerts see partial runs.
 - `lambda_handler.py` must load secrets into the environment before importing any module that imports `community_metrics.config` (it reads env vars at import time), and must keep destructive jobs (`bootstrap_tables`, `update_all`, `seed_from_csv`) out of `ALLOWED_JOBS`.
+- `infra/` (CDK) holds the AWS resources for the scheduled jobs. Keep its `SCHEDULES` payloads valid for `lambda_handler.py`, and never put secret values in CDK code or context; the secret is filled in by hand.
 - Keep docs in sync when pipeline contracts change (`README.md`, `LOCAL.md`, `AGENTS.md` in the same PR).
 - Preserve API endpoints consumed by the frontend unless an explicit breaking change is intended and documented.
 
