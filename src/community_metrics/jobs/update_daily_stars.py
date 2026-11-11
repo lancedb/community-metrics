@@ -35,7 +35,19 @@ def _daily_cumulative_stars(
     return totals
 
 
-def run(*, run_id: str | None = None, lookback_days: int = 0) -> dict[str, int]:
+def run(
+    *,
+    run_id: str | None = None,
+    lookback_days: int = 0,
+    latest_day_only: bool = False,
+) -> dict[str, int]:
+    """Write daily star totals.
+
+    latest_day_only: only write the latest completed day, from the repo's current
+    total (no write access needed). Missing earlier days are reported, not filled:
+    rebuilding past days needs the stargazer list, which GitHub only serves to users
+    with write access on the repo. daily_refresh uses this mode.
+    """
     store = build_store()
     run_ctx = start_run("update_daily_stars", run_id=run_id)
     latest_day = latest_completed_day()
@@ -55,8 +67,23 @@ def run(*, run_id: str | None = None, lookback_days: int = 0) -> dict[str, int]:
             )
             if not target_days:
                 continue
+            if latest_day_only:
+                skipped = [day for day in target_days if day != latest_day]
+                if skipped:
+                    print(
+                        f"[update_daily_stars] {metric_id}: not filling "
+                        f"{skipped[0].isoformat()}..{skipped[-1].isoformat()} "
+                        "(past star days need a stargazer backfill); "
+                        f"writing {latest_day.isoformat()} only",
+                        flush=True,
+                    )
+                target_days = [latest_day]
 
-            if len(target_days) == 1 and lookback_days == 0:
+            # One day to fill (the normal daily run, including daily_refresh's
+            # --lookback-days 1): the current total is exact. The stargazer list is
+            # only needed to rebuild several past days, and GitHub only serves it to
+            # users with write access on the repo.
+            if len(target_days) == 1:
                 totals = {target_days[0]: github.get_repo_stars(repo)}
                 source_ref = f"github:{repo}"
             else:

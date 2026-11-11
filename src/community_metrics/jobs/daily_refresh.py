@@ -20,8 +20,15 @@ def run(*, lookback_days: int = 0) -> dict[str, int]:
         f"inserted={downloads['inserted']} updated={downloads['updated']} errors={downloads['errors']}",
         flush=True,
     )
-    print(f"[daily_refresh] starting stars lookback_days={lookback_days}", flush=True)
-    stars = run_stars(run_id=f"{shared_run_id}:stars", lookback_days=lookback_days)
+    # Stars: latest day only, from the repo's current total. --lookback-days here
+    # is for re-fetching downloads; rebuilding past star days needs write access on
+    # the repos (run update_daily_stars --lookback-days N on its own for that).
+    print("[daily_refresh] starting stars (latest day only)", flush=True)
+    stars = run_stars(
+        run_id=f"{shared_run_id}:stars",
+        lookback_days=lookback_days,
+        latest_day_only=True,
+    )
     print(
         "[daily_refresh] stars complete: "
         f"inserted={stars['inserted']} updated={stars['updated']} errors={stars['errors']}",

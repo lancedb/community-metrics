@@ -66,6 +66,11 @@ Optional correction window:
 uv run python -m community_metrics.jobs.daily_refresh --lookback-days 7
 ```
 
+`--lookback-days` on `daily_refresh` re-fetches downloads only. Stars are always written
+for the latest day, from the repo's current total (no write access needed). Rebuilding
+past star days needs `update_daily_stars --lookback-days N`, which GitHub only allows for
+users with write access on the repos.
+
 Download-source clients retry HTTP 429 and transient 5xx responses with backoff and
 identify this collector with a descriptive user agent (required by crates.io). A day
 omitted by a successful registry response is left unwritten, not converted to zero,
