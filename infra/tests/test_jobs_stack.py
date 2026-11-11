@@ -124,12 +124,12 @@ def _as_list(value):
     return value if isinstance(value, list) else [value]
 
 
-def test_cdk_json_enables_daily_only():
+def test_cdk_json_enables_daily_and_monthly_duckdb():
     import json
     from pathlib import Path
 
     cdk_json = json.loads(
         (Path(__file__).resolve().parents[1] / "cdk.json").read_text()
     )
-    # Weekly guidance and the monthly DuckDB job stay off for now.
-    assert cdk_json["context"]["enabledSchedules"] == ["daily"]
+    # Weekly guidance stays off until OPENAI_API_KEY is in the secret.
+    assert cdk_json["context"]["enabledSchedules"] == ["daily", "monthly-duckdb"]

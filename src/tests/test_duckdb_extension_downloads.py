@@ -5,7 +5,6 @@ from datetime import date, datetime, timezone
 from community_metrics.jobs.update_duckdb_extension_downloads import (
     build_monthly_rows,
 )
-from community_metrics.sources import duckdb_extensions_client as client_module
 from community_metrics.sources.duckdb_extensions_client import (
     DuckDBExtensionsClient,
     WeeklyExtensionDownloads,
@@ -65,9 +64,10 @@ def test_client_reads_lance_and_treats_missing_lance_as_zero(monkeypatch) -> Non
         assert timeout == 7
         return _Response(payloads.pop(0))
 
-    monkeypatch.setattr(client_module.requests, "get", fake_get)
+    client = DuckDBExtensionsClient(timeout_seconds=7)
+    monkeypatch.setattr(client.session, "get", fake_get)
 
-    rows = DuckDBExtensionsClient(timeout_seconds=7).fetch_lance_weekly_downloads(
+    rows = client.fetch_lance_weekly_downloads(
         start_day=date(2026, 1, 1),
         end_day=date(2026, 1, 1),
     )
@@ -123,3 +123,14 @@ def test_build_monthly_rows_aggregates_split_and_marks_current_month() -> None:
             "latest_source_update_at": datetime(2026, 2, 6, tzinfo=timezone.utc),
         },
     ]
+
+
+def test_client_retries_rate_limits_and_server_errors() -> None:
+    adapter = DuckDBExtensionsClient().session.get_adapter(
+        "https://extensions.duckdb.org"
+    )
+    retry = adapter.max_retries
+
+    assert retry.total == 5
+    assert {429, 500, 502, 503, 504} <= set(retry.status_forcelist)
+    assert 404 not in retry.status_forcelist

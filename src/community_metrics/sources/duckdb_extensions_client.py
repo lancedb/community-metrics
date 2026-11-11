@@ -4,9 +4,8 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Literal
 
-import requests
-
 from community_metrics.config import REQUEST_TIMEOUT_SECONDS
+from community_metrics.sources.http_client import build_retrying_session
 
 DuckDBExtensionRepo = Literal["core", "community"]
 
@@ -28,6 +27,9 @@ class DuckDBExtensionsClient:
 
     def __init__(self, timeout_seconds: int = REQUEST_TIMEOUT_SECONDS):
         self.timeout_seconds = timeout_seconds
+        # About 90 requests per run; retry 429/5xx and connection errors with backoff
+        # so one bad response doesn't fail the whole job.
+        self.session = build_retrying_session()
 
     def fetch_lance_weekly_downloads(
         self,
@@ -49,7 +51,7 @@ class DuckDBExtensionsClient:
         week_date: date,
     ) -> WeeklyExtensionDownloads | None:
         url = weekly_download_url(repo, week_date)
-        response = requests.get(url, timeout=self.timeout_seconds)
+        response = self.session.get(url, timeout=self.timeout_seconds)
         if response.status_code == 404:
             return None
         response.raise_for_status()
