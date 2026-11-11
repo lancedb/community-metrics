@@ -1,41 +1,151 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+@import "tw-animate-css";
 
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * LanceDB theme. Dark is the default (same warm palette as the team's metrics deck:
+ * accent #e97852, up #9ccb7a, down #e2654a); light mode is a warm cream variant.
+ * Chart colors are tuned per theme so every series stays readable on its background.
+ */
 :root {
-  --color-brand: #f46f52;
-  --color-brand-strong: #e35b3f;
-  --color-brand-soft: #fde2da;
-  --color-canvas: #fff7f3;
-  --color-panel: #fffdfb;
-  --color-ink: #251814;
-  --color-muted: #87675c;
-  --color-edge: #f2c6b9;
-  --color-up: #0f8a4b;
-  --color-up-bg: #d8f5e6;
-  --color-down: #b54733;
-  --color-down-bg: #fde4de;
+  --radius: 0.75rem;
+
+  --background: #faf6f1;
+  --foreground: #221a14;
+  --card: #fffdfa;
+  --card-foreground: #221a14;
+  --popover: #fffdfa;
+  --popover-foreground: #221a14;
+  --primary: #d4592f;
+  --primary-foreground: #fffaf5;
+  --secondary: #f1e9df;
+  --secondary-foreground: #2c221b;
+  --muted: #f1e9df;
+  --muted-foreground: #74655a;
+  --accent: #f6e2d6;
+  --accent-foreground: #2c221b;
+  --destructive: #c2412a;
+  --border: #e6dbcf;
+  --input: #ddd0c2;
+  --ring: #d4592f;
+
+  --up: #3f8a32;
+  --up-soft: #e3f1dc;
+  --down: #c2412a;
+  --down-soft: #f9e1dc;
+  --brand-glow: rgba(212, 89, 47, 0.12);
+
+  --chart-1: #d4592f;
+  --chart-2: #2f7f93;
+  --chart-3: #a77a1e;
+  --chart-4: #5a8f3c;
+  --chart-5: #8a5bb0;
 }
 
-body {
-  margin: 0;
-  font-family:
-    IBMPlexSans,
-    Satoshi,
-    Manrope,
-    ui-sans-serif,
-    system-ui,
-    -apple-system,
-    BlinkMacSystemFont,
-    'Segoe UI',
-    Roboto,
-    'Helvetica Neue',
-    Arial,
-    'Noto Sans',
-    sans-serif;
-  background:
-    radial-gradient(circle at 12% 16%, rgba(244, 111, 82, 0.2), transparent 38%),
-    radial-gradient(circle at 86% 8%, rgba(255, 190, 170, 0.35), transparent 35%),
-    var(--color-canvas);
-  color: var(--color-ink);
+.dark {
+  --background: #14110e;
+  --foreground: #f0e7dc;
+  --card: #1c1814;
+  --card-foreground: #f0e7dc;
+  --popover: #221d18;
+  --popover-foreground: #f0e7dc;
+  --primary: #e97852;
+  --primary-foreground: #1a1613;
+  --secondary: #2a241e;
+  --secondary-foreground: #f0e7dc;
+  --muted: #241f1a;
+  --muted-foreground: #a89a8b;
+  --accent: #2e2620;
+  --accent-foreground: #f0e7dc;
+  --destructive: #e2654a;
+  --border: rgba(240, 231, 220, 0.1);
+  --input: rgba(240, 231, 220, 0.16);
+  --ring: #e97852;
+
+  --up: #9ccb7a;
+  --up-soft: rgba(156, 203, 122, 0.14);
+  --down: #e2654a;
+  --down-soft: rgba(226, 101, 74, 0.15);
+  --brand-glow: rgba(233, 120, 82, 0.16);
+
+  --chart-1: #e97852;
+  --chart-2: #7fb5c4;
+  --chart-3: #d4b572;
+  --chart-4: #9ccb7a;
+  --chart-5: #c39be0;
+}
+
+@theme inline {
+  --font-sans: "Hanken Grotesk Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-up: var(--up);
+  --color-up-soft: var(--up-soft);
+  --color-down: var(--down);
+  --color-down-soft: var(--down-soft);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html {
+    color-scheme: light;
+  }
+
+  html.dark {
+    color-scheme: dark;
+  }
+
+  body {
+    @apply bg-background font-sans text-foreground antialiased;
+    background-image: radial-gradient(60rem 28rem at 10% -10%, var(--brand-glow), transparent 70%);
+    background-repeat: no-repeat;
+  }
+
+  /* Native date inputs follow the theme. */
+  input[type="date"]::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    opacity: 0.65;
+  }
+
+  .dark input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+  }
+}
+
+@layer utilities {
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
 }

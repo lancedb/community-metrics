@@ -1,192 +1,49 @@
-import { useMemo, useState } from 'react'
-import type { DuckDBLanceExtensionDownloadPoint } from '../types'
+'use client'
+
+import { DatabaseIcon } from 'lucide-react'
+import { Bar, BarChart, CartesianGrid, Cell, XAxis, YAxis } from 'recharts'
+
+import { ChartContainer, ChartTooltip, type ChartConfig } from '@/components/ui/chart'
+import { formatCompact, formatInt, formatMonth, formatMonthTick } from '@/lib/format'
+import type { DuckDBLanceExtensionDownloadPoint } from '@/types'
+
 import { ChartDataTable } from './ChartDataTable'
+import { SectionPanel } from './SectionPanel'
 
 type DuckDBExtensionDownloadsWidgetProps = {
   points: DuckDBLanceExtensionDownloadPoint[]
 }
 
-type ChartPoint = {
-  x: number
-  communityY: number
-  coreY: number
-  communityValue: number
-  coreValue: number
-  monthLabel: string
-  total: number
-}
+const chartConfig = {
+  community_downloads: { label: 'Community', color: 'var(--chart-2)' },
+  core_downloads: { label: 'Core', color: 'var(--chart-1)' },
+} satisfies ChartConfig
 
-function formatInt(value: number): string {
-  return Intl.NumberFormat('en-US').format(value)
-}
+const SERIES = [
+  { key: 'community_downloads', label: 'Community' },
+  { key: 'core_downloads', label: 'Core' },
+] as const
 
-function formatCompact(value: number): string {
-  return Intl.NumberFormat('en-US', {
-    notation: 'compact',
-    maximumFractionDigits: 1,
-  }).format(value)
-}
-
-function CombinedChart({ points }: { points: DuckDBLanceExtensionDownloadPoint[] }) {
-  const [hoverIndex, setHoverIndex] = useState<number | null>(null)
-
-  const width = 640
-  const height = 220
-  const margin = { top: 20, right: 22, bottom: 40, left: 52 }
-  const plotWidth = width - margin.left - margin.right
-  const plotHeight = height - margin.top - margin.bottom
-
-  const prepared = useMemo(() => {
-    if (points.length < 2) return null
-    const values = points.flatMap((point) => [point.community_downloads, point.core_downloads])
-    const max = Math.max(...values, 1)
-    const step = plotWidth / (points.length - 1)
-    const chartPoints: ChartPoint[] = points.map((point, index) => {
-      return {
-        x: margin.left + index * step,
-        communityY: margin.top + (1 - point.community_downloads / max) * plotHeight,
-        coreY: margin.top + (1 - point.core_downloads / max) * plotHeight,
-        communityValue: point.community_downloads,
-        coreValue: point.core_downloads,
-        monthLabel: point.month_label,
-        total: point.total_downloads,
-      }
-    })
-    return {
-      max,
-      step,
-      chartPoints,
-      communityLine: chartPoints.map((point) => `${point.x},${point.communityY}`).join(' '),
-      coreLine: chartPoints.map((point) => `${point.x},${point.coreY}`).join(' '),
-      startLabel: points[0].month_label,
-      endLabel: points[points.length - 1].month_label,
-    }
-  }, [plotHeight, plotWidth, points])
-
-  if (!prepared) {
-    return (
-      <div className="rounded-lg border border-edge bg-panel p-4 text-sm text-muted">
-        Need at least 2 monthly points for the DuckDB extension trend.
-      </div>
-    )
-  }
-
-  const hovered = hoverIndex === null ? null : prepared.chartPoints[hoverIndex]
-
+function TooltipBody({ point }: { point: DuckDBLanceExtensionDownloadPoint }) {
   return (
-    <div className="rounded-lg border border-edge bg-panel p-4">
-      <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-sm font-bold text-ink">Core vs. Community</p>
-          <p className="text-xs text-muted">
-            {hovered
-              ? `${hovered.monthLabel} · Community ${formatInt(hovered.communityValue)} · Core ${formatInt(hovered.coreValue)} · Total ${formatInt(hovered.total)}`
-              : `max ${formatCompact(prepared.max)}`}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-3 text-xs font-semibold text-muted">
-          <span className="inline-flex items-center gap-1.5">
-            <span className="h-2.5 w-2.5 rounded-full bg-brand-strong" />
-            Community
+    <div className="grid min-w-44 gap-1.5 rounded-lg border bg-popover px-3 py-2 text-xs shadow-xl">
+      <p className="font-medium text-foreground">
+        {formatMonth(point.month_start)}
+        {point.is_partial_month && <span className="ml-1.5 text-muted-foreground">(partial)</span>}
+      </p>
+      {SERIES.map((series) => (
+        <div key={series.key} className="flex items-center justify-between gap-6">
+          <span className="flex items-center gap-1.5 text-muted-foreground">
+            <span className="size-2 rounded-[2px]" style={{ background: `var(--color-${series.key})` }} />
+            {series.label}
           </span>
-          <span className="inline-flex items-center gap-1.5">
-            <span className="h-2.5 w-2.5 rounded-full bg-up" />
-            Core
-          </span>
+          <span className="font-mono text-foreground tabular">{formatInt(point[series.key])}</span>
         </div>
+      ))}
+      <div className="flex items-center justify-between gap-6 border-t pt-1.5">
+        <span className="text-muted-foreground">Total</span>
+        <span className="font-mono font-medium text-foreground tabular">{formatInt(point.total_downloads)}</span>
       </div>
-
-      <svg
-        className="h-56 w-full"
-        viewBox={`0 0 ${width} ${height}`}
-        preserveAspectRatio="none"
-        role="img"
-        aria-label="Community and core monthly DuckDB lance extension downloads"
-        data-testid="chart"
-        onMouseLeave={() => setHoverIndex(null)}
-        onMouseMove={(event) => {
-          const rect = event.currentTarget.getBoundingClientRect()
-          const xPx = event.clientX - rect.left
-          const x = (xPx / rect.width) * width
-          const index = Math.round((x - margin.left) / prepared.step)
-          setHoverIndex(Math.max(0, Math.min(prepared.chartPoints.length - 1, index)))
-        }}
-      >
-        {[0, 0.5, 1].map((ratio) => {
-          const y = margin.top + (1 - ratio) * plotHeight
-          return (
-            <g key={ratio}>
-              <line x1={margin.left} x2={width - margin.right} y1={y} y2={y} stroke="var(--color-edge)" />
-              <text x={margin.left - 10} y={y + 4} textAnchor="end" fontSize="11" className="fill-muted">
-                {formatCompact(Math.round(prepared.max * ratio))}
-              </text>
-            </g>
-          )
-        })}
-        <line
-          x1={margin.left}
-          x2={width - margin.right}
-          y1={height - margin.bottom}
-          y2={height - margin.bottom}
-          stroke="var(--color-edge)"
-        />
-        <polyline
-          fill="none"
-          stroke="var(--color-brand-strong)"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth="3"
-          points={prepared.communityLine}
-        />
-        <polyline
-          fill="none"
-          stroke="var(--color-up)"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth="3"
-          points={prepared.coreLine}
-        />
-        {prepared.chartPoints.map((point, index) => (
-          <g key={point.monthLabel}>
-            <circle
-              cx={point.x}
-              cy={point.communityY}
-              r={hoverIndex === index ? 4 : 2.5}
-              fill="#fffdfb"
-              stroke="var(--color-brand-strong)"
-              strokeWidth="1.75"
-            />
-            <circle
-              cx={point.x}
-              cy={point.coreY}
-              r={hoverIndex === index ? 4 : 2.5}
-              fill="#fffdfb"
-              stroke="var(--color-up)"
-              strokeWidth="1.75"
-            />
-          </g>
-        ))}
-        {hovered && (
-          <>
-            <line
-              x1={hovered.x}
-              x2={hovered.x}
-              y1={margin.top}
-              y2={height - margin.bottom}
-              stroke="var(--color-muted)"
-              strokeDasharray="3 4"
-            />
-            <circle cx={hovered.x} cy={hovered.communityY} r="4" fill="var(--color-brand-strong)" />
-            <circle cx={hovered.x} cy={hovered.coreY} r="4" fill="var(--color-up)" />
-          </>
-        )}
-        <text x={margin.left} y={height - 8} textAnchor="start" fontSize="11" className="fill-muted">
-          {prepared.startLabel}
-        </text>
-        <text x={width - margin.right} y={height - 8} textAnchor="end" fontSize="11" className="fill-muted">
-          {prepared.endLabel}
-        </text>
-      </svg>
     </div>
   )
 }
@@ -195,26 +52,92 @@ export function DuckDBExtensionDownloadsWidget({ points }: DuckDBExtensionDownlo
   if (points.length === 0) return null
 
   const latest = points[points.length - 1]
-  const periodLabel = latest.is_partial_month ? 'this month' : 'last full month'
+  const periodLabel = latest.is_partial_month ? 'This month' : 'Last full month'
 
   return (
-    <section className="space-y-4 rounded-lg border border-edge bg-white/90 p-5 backdrop-blur">
-      <header className="border-b border-edge pb-3">
-        <h2 className="text-2xl font-bold text-ink">Lance-DuckDB Extension Downloads</h2>
-        <p className="text-sm text-muted">Monthly downloads for the DuckDB lance extension, starting January 2026.</p>
-      </header>
-
-      <div className="flex flex-wrap items-end justify-between gap-3">
+    <SectionPanel
+      title="Lance-DuckDB Extension Downloads"
+      icon={<DatabaseIcon />}
+      description="Monthly downloads of the DuckDB lance extension from the core and community repositories, starting January 2026."
+    >
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">{periodLabel}</p>
-          <p className="text-3xl font-bold leading-none text-ink">{formatInt(latest.total_downloads)}</p>
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            {periodLabel} · {formatMonth(latest.month_start)}
+          </p>
+          <p className="mt-1 text-4xl font-semibold tracking-tight text-foreground tabular">
+            {formatInt(latest.total_downloads)}
+          </p>
         </div>
-        <p className="text-sm font-semibold text-brand-strong">
-          Core: {formatCompact(latest.core_downloads)} · Community: {formatCompact(latest.community_downloads)}
-        </p>
+        <div className="flex items-center gap-5 text-sm" aria-label="Legend">
+          {SERIES.map((series) => (
+            <div key={series.key} className="flex items-center gap-2">
+              <span className="size-2.5 rounded-[3px]" style={{ background: chartConfig[series.key].color }} />
+              <span className="text-muted-foreground">{series.label}</span>
+              <span className="font-mono font-medium text-foreground tabular">{formatCompact(latest[series.key])}</span>
+            </div>
+          ))}
+        </div>
       </div>
 
-      <CombinedChart points={points} />
+      {points.length < 2 ? (
+        <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+          Need at least 2 monthly points for the DuckDB extension trend.
+        </p>
+      ) : (
+        <ChartContainer data-testid="chart" config={chartConfig} className="aspect-auto h-64 w-full sm:h-72">
+          <BarChart data={points} margin={{ top: 8, right: 8, bottom: 0, left: 4 }} accessibilityLayer>
+            <CartesianGrid vertical={false} strokeDasharray="3 4" />
+            <XAxis
+              dataKey="month_start"
+              tickLine={false}
+              axisLine={false}
+              tickMargin={10}
+              minTickGap={8}
+              tickFormatter={formatMonthTick}
+              className="font-mono text-[11px]"
+            />
+            <YAxis
+              width={44}
+              tickLine={false}
+              axisLine={false}
+              tickCount={5}
+              tickFormatter={(value: number) => formatCompact(value)}
+              className="font-mono text-[11px]"
+            />
+            <ChartTooltip
+              cursor={{ fill: 'var(--muted)', opacity: 0.5 }}
+              content={({ active, payload }) =>
+                active && payload?.length ? (
+                  <TooltipBody point={payload[0].payload as DuckDBLanceExtensionDownloadPoint} />
+                ) : null
+              }
+            />
+            {SERIES.map((series, index) => (
+              <Bar
+                key={series.key}
+                dataKey={series.key}
+                stackId="downloads"
+                fill={`var(--color-${series.key})`}
+                radius={index === SERIES.length - 1 ? [6, 6, 0, 0] : [0, 0, 0, 0]}
+                maxBarSize={56}
+                animationDuration={500}
+              >
+                {points.map((point) => (
+                  <Cell key={point.month_start} fillOpacity={point.is_partial_month ? 0.45 : 1} />
+                ))}
+              </Bar>
+            ))}
+          </BarChart>
+        </ChartContainer>
+      )}
+      {latest.is_partial_month && (
+        <p className="mt-3 text-xs text-muted-foreground">
+          Faded bar: {formatMonth(latest.month_start)} so far. DuckDB publishes weekly counts; this updates on the 1st of
+          each month.
+        </p>
+      )}
+
       <ChartDataTable
         caption="DuckDB lance extension downloads by month"
         columns={[
@@ -225,6 +148,6 @@ export function DuckDBExtensionDownloadsWidget({ points }: DuckDBExtensionDownlo
         ]}
         rows={points}
       />
-    </section>
+    </SectionPanel>
   )
 }

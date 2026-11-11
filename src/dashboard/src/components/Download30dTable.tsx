@@ -1,14 +1,19 @@
+'use client'
+
+import { CalendarRangeIcon, Loader2Icon, RotateCcwIcon } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
+
+import { Button } from '@/components/ui/button'
+import { formatInt } from '@/lib/format'
+import { cn } from '@/lib/utils'
+
 import { fetchDownloadWindowTotals } from '../api'
 import type { DownloadWindowTotals } from '../types'
+import { SectionPanel } from './SectionPanel'
 
 type Download30dTableProps = {
   initialTotals: DownloadWindowTotals
   maxDaysBack?: number
-}
-
-function formatInt(value: number): string {
-  return Intl.NumberFormat('en-US').format(value)
 }
 
 function formatWindow(date: Date): string {
@@ -34,19 +39,9 @@ function toInputDate(date: Date): string {
 
 function parseInputDate(value: string): Date | null {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null
-  const [yearRaw, monthRaw, dayRaw] = value.split('-')
-  const year = Number(yearRaw)
-  const month = Number(monthRaw)
-  const day = Number(dayRaw)
-  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return null
+  const [year, month, day] = value.split('-').map(Number)
   const parsed = new Date(year, month - 1, day)
-  if (
-    parsed.getFullYear() !== year ||
-    parsed.getMonth() !== month - 1 ||
-    parsed.getDate() !== day
-  ) {
-    return null
-  }
+  if (parsed.getFullYear() !== year || parsed.getMonth() !== month - 1 || parsed.getDate() !== day) return null
   return dateOnlyLocal(parsed)
 }
 
@@ -60,26 +55,27 @@ function clampDate(value: Date, min: Date, max: Date): Date {
   return value
 }
 
+const PRESETS = [7, 30, 90] as const
+
+const inputClass =
+  'block h-10 w-full rounded-lg border border-input bg-background/70 px-3 font-mono text-sm text-foreground tabular shadow-xs transition-colors focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none'
+
 export function Download30dTable({ initialTotals, maxDaysBack = 90 }: Download30dTableProps) {
-  const maxDate = useMemo(() => {
-    const parsed = parseIsoDate(initialTotals.window_end)
-    return parsed ?? dateOnlyLocal(new Date())
-  }, [initialTotals.window_end])
+  const maxDate = useMemo(
+    () => parseIsoDate(initialTotals.window_end) ?? dateOnlyLocal(new Date()),
+    [initialTotals.window_end],
+  )
   const earliestAllowed = useMemo(() => minusDays(maxDate, maxDaysBack), [maxDate, maxDaysBack])
   const defaultStart = useMemo(() => {
     const parsed = parseIsoDate(initialTotals.window_start)
     return clampDate(parsed ?? minusDays(maxDate, 29), earliestAllowed, maxDate)
   }, [earliestAllowed, initialTotals.window_start, maxDate])
-  const defaultEnd = useMemo(() => maxDate, [maxDate])
-  const minInputDate = useMemo(() => toInputDate(earliestAllowed), [earliestAllowed])
-  const maxInputDate = useMemo(() => toInputDate(maxDate), [maxDate])
+  const minInputDate = toInputDate(earliestAllowed)
+  const maxInputDate = toInputDate(maxDate)
 
   const [startDate, setStartDate] = useState<Date>(defaultStart)
-  const [endDate, setEndDate] = useState<Date>(defaultEnd)
-  const [totals, setTotals] = useState(() => ({
-    lance: initialTotals.lance,
-    lancedb: initialTotals.lancedb,
-  }))
+  const [endDate, setEndDate] = useState<Date>(maxDate)
+  const [totals, setTotals] = useState(() => ({ lance: initialTotals.lance, lancedb: initialTotals.lancedb }))
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -99,111 +95,168 @@ export function Download30dTable({ initialTotals, maxDaysBack = 90 }: Download30
     setStartDate((currentStart) => (nextEnd < currentStart ? nextEnd : currentStart))
   }
 
-  const windowStart = useMemo(() => {
-    return startDate <= endDate ? startDate : endDate
-  }, [endDate, startDate])
+  const applyPreset = (days: number) => {
+    setEndDate(maxDate)
+    setStartDate(clampDate(minusDays(maxDate, days - 1), earliestAllowed, maxDate))
+  }
 
-  const windowEnd = useMemo(() => {
-    return startDate <= endDate ? endDate : startDate
-  }, [endDate, startDate])
+  const windowStart = startDate <= endDate ? startDate : endDate
+  const windowEnd = startDate <= endDate ? endDate : startDate
+  const windowStartIso = toInputDate(windowStart)
+  const windowEndIso = toInputDate(windowEnd)
+  const windowDays = Math.round((windowEnd.getTime() - windowStart.getTime()) / 86_400_000) + 1
 
   useEffect(() => {
     let cancelled = false
-    const windowStartIso = toInputDate(windowStart)
-    const windowEndIso = toInputDate(windowEnd)
-
     setIsRefreshing(true)
     setError(null)
     fetchDownloadWindowTotals(windowStartIso, windowEndIso)
       .then((next) => {
-        if (cancelled) return
-        setTotals({ lance: next.lance, lancedb: next.lancedb })
+        if (!cancelled) setTotals({ lance: next.lance, lancedb: next.lancedb })
       })
       .catch((err) => {
-        if (cancelled) return
-        setError(err instanceof Error ? err.message : 'Could not refresh download totals')
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Could not refresh download totals')
       })
       .finally(() => {
         if (!cancelled) setIsRefreshing(false)
       })
-
     return () => {
       cancelled = true
     }
-  }, [windowEnd, windowStart])
+  }, [windowEndIso, windowStartIso])
 
-  const lance = totals.lance
-  const lancedb = totals.lancedb
-  const total = lance + lancedb
+  const total = totals.lance + totals.lancedb
+  const lancedbShare = total > 0 ? (totals.lancedb / total) * 100 : 0
 
   return (
-    <section className="relative z-20 space-y-4 rounded-2xl border border-edge bg-white/90 p-5 backdrop-blur">
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-edge pb-3">
-        <div>
-          <h2 className="text-2xl font-bold text-ink">Downloads in Selected Window</h2>
-          <p className="text-sm text-muted">
-            Window: {formatWindow(windowStart)} to {formatWindow(windowEnd)}
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => {
-            setStartDate(defaultStart)
-            setEndDate(defaultEnd)
-            setTotals({ lance: initialTotals.lance, lancedb: initialTotals.lancedb })
-            setError(null)
-          }}
-          className="rounded-md border border-edge bg-panel px-3 py-2 text-sm font-semibold text-ink hover:bg-brand-soft"
-        >
-          Reset to last 30 days
-        </button>
-      </header>
-
-      <div className="flex flex-wrap gap-3">
-        <label className="w-full sm:w-[48%] lg:w-72">
-          <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.14em] text-muted">Start date</span>
+    <SectionPanel
+      title="Downloads in Selected Window"
+      icon={<CalendarRangeIcon />}
+      description={
+        <>
+          Window: {formatWindow(windowStart)} to {formatWindow(windowEnd)}
+          <span className="text-muted-foreground/70"> · {windowDays} days</span>
+        </>
+      }
+      actions={
+        <>
+          <div className="flex rounded-lg border bg-background/60 p-0.5" role="group" aria-label="Quick windows">
+            {PRESETS.map((days) => {
+              const active = windowEndIso === maxInputDate && windowDays === days
+              return (
+                <button
+                  key={days}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => applyPreset(days)}
+                  className={cn(
+                    'rounded-md px-2.5 py-1 font-mono text-xs font-medium transition-colors',
+                    active ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  {days}d
+                </button>
+              )
+            })}
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setStartDate(defaultStart)
+              setEndDate(maxDate)
+              setTotals({ lance: initialTotals.lance, lancedb: initialTotals.lancedb })
+              setError(null)
+            }}
+          >
+            <RotateCcwIcon aria-hidden />
+            Reset to last 30 days
+          </Button>
+        </>
+      }
+    >
+      <div className="grid gap-3 sm:grid-cols-2 lg:max-w-xl">
+        <label className="block">
+          <span className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            Start date
+          </span>
           <input
             type="date"
-            value={toInputDate(windowStart)}
+            value={windowStartIso}
             min={minInputDate}
             max={maxInputDate}
             onChange={(event) => onStartDateChange(event.target.value)}
-            className="block w-full rounded-lg border border-edge bg-panel px-3 py-2 text-sm text-ink focus:border-brand-strong focus:outline-none"
+            className={inputClass}
           />
         </label>
-        <label className="w-full sm:w-[48%] lg:w-72">
-          <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.14em] text-muted">End date</span>
+        <label className="block">
+          <span className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            End date
+          </span>
           <input
             type="date"
-            value={toInputDate(windowEnd)}
+            value={windowEndIso}
             min={minInputDate}
             max={maxInputDate}
             onChange={(event) => onEndDateChange(event.target.value)}
-            className="block w-full rounded-lg border border-edge bg-panel px-3 py-2 text-sm text-ink focus:border-brand-strong focus:outline-none"
+            className={inputClass}
           />
         </label>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-left">
+      <div className={cn('mt-6 transition-opacity', isRefreshing && 'opacity-60')} aria-busy={isRefreshing}>
+        <table className="w-full table-fixed border-separate border-spacing-0 text-left">
           <thead>
-            <tr className="border-b border-edge text-xs uppercase tracking-[0.14em] text-muted">
-              <th className="px-2 py-3 font-semibold">LanceDB</th>
-              <th className="px-2 py-3 font-semibold">Lance</th>
-              <th className="px-2 py-3 font-semibold">Total</th>
+            <tr className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              {[
+                { label: 'LanceDB', color: 'var(--chart-1)' },
+                { label: 'Lance', color: 'var(--chart-2)' },
+                { label: 'Total', color: null },
+              ].map((column) => (
+                <th key={column.label} scope="col" className="pb-1.5 pr-3 font-medium">
+                  <span className="inline-flex items-center gap-1.5">
+                    {column.color && (
+                      <span aria-hidden className="size-2 rounded-full" style={{ background: column.color }} />
+                    )}
+                    {column.label}
+                  </span>
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
-            <tr className="text-lg font-bold text-ink">
-              <td className="px-2 py-3">{formatInt(lancedb)}</td>
-              <td className="px-2 py-3">{formatInt(lance)}</td>
-              <td className="px-2 py-3">{formatInt(total)}</td>
+            <tr className="text-xl font-semibold tracking-tight text-foreground tabular sm:text-3xl">
+              <td className="pr-3">{formatInt(totals.lancedb)}</td>
+              <td className="pr-3">{formatInt(totals.lance)}</td>
+              <td className="pr-3 text-primary">{formatInt(total)}</td>
             </tr>
           </tbody>
         </table>
+
+        <div
+          className="mt-5 flex h-2 overflow-hidden rounded-full bg-muted"
+          role="img"
+          aria-label={`LanceDB ${lancedbShare.toFixed(0)}% and Lance ${(100 - lancedbShare).toFixed(0)}% of downloads in this window`}
+        >
+          <div className="h-full bg-chart-1 transition-[width] duration-500" style={{ width: `${lancedbShare}%` }} />
+          <div className="h-full flex-1 bg-chart-2" />
+        </div>
+        <div className="mt-2 flex justify-between font-mono text-xs text-muted-foreground tabular">
+          <span>LanceDB {lancedbShare.toFixed(0)}%</span>
+          <span>Lance {(100 - lancedbShare).toFixed(0)}%</span>
+        </div>
       </div>
-      {isRefreshing && <p className="text-xs text-muted">Refreshing totals...</p>}
-      {error && <p className="text-xs text-down">{error}</p>}
-    </section>
+
+      <div className="mt-3 min-h-5 text-xs" aria-live="polite">
+        {isRefreshing && (
+          <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+            <Loader2Icon aria-hidden className="size-3 animate-spin" />
+            Refreshing totals...
+          </span>
+        )}
+        {error && <span className="text-down">{error}</span>}
+      </div>
+    </SectionPanel>
   )
 }

@@ -1,35 +1,22 @@
-import { useMemo, useState } from 'react'
-import type { DownloadSnapshotPoint } from '../types'
+'use client'
+
+import { DownloadIcon, LineChartIcon } from 'lucide-react'
+import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from 'recharts'
+
+import { Button } from '@/components/ui/button'
+import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart'
+import { formatCompact, formatDay, formatInt, formatMonthTick, formatPercent, formatShortDay } from '@/lib/format'
+import { cn } from '@/lib/utils'
+import type { DownloadSnapshotPoint } from '@/types'
+
 import { ChartDataTable } from './ChartDataTable'
+import { SectionPanel } from './SectionPanel'
 
 type DownloadSnapshotChartProps = {
   points: DownloadSnapshotPoint[]
 }
 
-type ChartPoint = {
-  x: number
-  y: number
-  value: number
-  periodEnd: string
-}
-
-function formatInt(value: number): string {
-  return Intl.NumberFormat('en-US').format(value)
-}
-
-function formatShortDay(value: string): string {
-  const date = new Date(`${value}T00:00:00Z`)
-  return date.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    timeZone: 'UTC',
-  })
-}
-
-function formatAxisDay(value: string): string {
-  const date = new Date(`${value}T00:00:00Z`)
-  return `${String(date.getUTCMonth() + 1).padStart(2, '0')}-${date.getUTCFullYear()}`
-}
+const chartConfig = { total: { label: 'Total downloads', color: 'var(--chart-1)' } } satisfies ChartConfig
 
 function csvEscape(value: string | number): string {
   const text = String(value)
@@ -80,163 +67,135 @@ function exportSnapshotCsv(points: DownloadSnapshotPoint[]) {
   URL.revokeObjectURL(url)
 }
 
+/** Month-end points read as months; a mid-month (partial) last point reads as its day. */
+function tickLabel(periodEnd: string): string {
+  const date = new Date(`${periodEnd}T00:00:00Z`)
+  const nextDay = new Date(date.getTime() + 86_400_000)
+  return nextDay.getUTCDate() === 1 ? formatMonthTick(periodEnd) : formatShortDay(periodEnd)
+}
+
+function Stat({ label, value, className }: { label: string; value: string; className?: string }) {
+  return (
+    <div className={cn('min-w-0', className)}>
+      <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
+      <p className="mt-1 text-lg font-semibold text-foreground tabular">{value}</p>
+    </div>
+  )
+}
+
 export function DownloadSnapshotChart({ points }: DownloadSnapshotChartProps) {
-  const [hoverIndex, setHoverIndex] = useState<number | null>(null)
-
-  const width = 760
-  const height = 320
-  const margin = { top: 24, right: 28, bottom: 76, left: 86 }
-  const plotWidth = width - margin.left - margin.right
-  const plotHeight = height - margin.top - margin.bottom
-  const baseline = margin.top + plotHeight
-
-  const prepared = useMemo(() => {
-    if (points.length < 2) return null
-
-    const values = points.map((point) => point.total)
-    const maxValue = Math.max(...values)
-    const yMax = Math.max(1, Math.ceil(maxValue / 1_000_000) * 1_000_000)
-    const step = plotWidth / (points.length - 1)
-    const chartPoints: ChartPoint[] = points.map((point, index) => {
-      const x = margin.left + index * step
-      const y = margin.top + (1 - point.total / yMax) * plotHeight
-      return { x, y, value: point.total, periodEnd: point.period_end }
-    })
-    const linePath = chartPoints
-      .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`)
-      .join(' ')
-    const areaPath = `${linePath} L ${chartPoints[chartPoints.length - 1].x} ${baseline} L ${chartPoints[0].x} ${baseline} Z`
-    const ticks = Array.from({ length: 5 }, (_, index) => Math.round((yMax * index) / 4))
-    const labelEvery = Math.max(1, Math.ceil(points.length / 10))
-
-    return {
-      yMax,
-      chartPoints,
-      linePath,
-      areaPath,
-      ticks,
-      step,
-      labelEvery,
-      latest: points[points.length - 1],
-    }
-  }, [baseline, plotHeight, plotWidth, points])
-
-  if (!prepared) {
+  if (points.length < 2) {
     return (
-      <section className="rounded-lg border border-edge bg-white/90 p-5 text-sm text-muted backdrop-blur">
-        Not enough snapshot points to render the download chart.
-      </section>
+      <SectionPanel title="Monthly Download Snapshots" icon={<LineChartIcon />}>
+        <p className="text-sm text-muted-foreground">Not enough snapshot points to render the download chart.</p>
+      </SectionPanel>
     )
   }
 
-  const hovered = hoverIndex === null ? null : prepared.chartPoints[hoverIndex]
+  const latest = points[points.length - 1]
+  const previous = points[points.length - 2]
+  const change = previous.total > 0 ? ((latest.total - previous.total) / previous.total) * 100 : null
 
   return (
-    <section className="space-y-4 rounded-lg border border-edge bg-white/90 p-5 backdrop-blur">
-      <header className="flex flex-wrap items-start justify-between gap-3 border-b border-edge pb-3">
-        <div>
-          <h2 className="text-2xl font-bold text-ink">Monthly Download Snapshots</h2>
-          <p className="text-sm text-muted">
-            Total downloads across Lance and LanceDB packages, through {formatShortDay(prepared.latest.period_end)}.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => exportSnapshotCsv(points)}
-          className="rounded-md border border-edge bg-panel px-3 py-2 text-sm font-semibold text-ink hover:bg-brand-soft"
-        >
+    <SectionPanel
+      title="Monthly Download Snapshots"
+      icon={<LineChartIcon />}
+      description={`Total downloads across Lance and LanceDB packages, through ${formatShortDay(latest.period_end)}.`}
+      actions={
+        <Button type="button" variant="outline" size="sm" onClick={() => exportSnapshotCsv(points)}>
+          <DownloadIcon aria-hidden />
           Export snapshot
-        </button>
-      </header>
-
-      <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">Latest total</p>
-          <p className="text-3xl font-bold leading-none text-ink">{formatInt(prepared.latest.total)}</p>
+        </Button>
+      }
+    >
+      <div className="mb-6 grid grid-cols-2 gap-x-6 gap-y-4 sm:flex sm:flex-wrap sm:items-end">
+        <div className="col-span-2 sm:mr-6">
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Latest total</p>
+          <div className="mt-1 flex items-baseline gap-3">
+            <p className="text-4xl font-semibold tracking-tight text-foreground tabular">{formatInt(latest.total)}</p>
+            {change !== null && (
+              <span
+                className={cn(
+                  'font-mono text-sm tabular',
+                  change >= 0 ? 'text-up' : 'text-down',
+                )}
+              >
+                {formatPercent(change)} vs {formatShortDay(previous.period_end)}
+              </span>
+            )}
+          </div>
         </div>
-        <p className="text-sm font-semibold text-brand-strong">
-          {hovered ? `${hovered.periodEnd} · ${formatInt(hovered.value)}` : 'Hover for point value'}
-        </p>
+        <Stat label="LanceDB" value={formatCompact(latest.lancedb)} />
+        <Stat label="Lance" value={formatCompact(latest.lance)} />
       </div>
 
-      <div className="overflow-x-auto">
-        <svg
-          className="min-w-[640px] rounded-lg bg-panel"
-          viewBox={`0 0 ${width} ${height}`}
-          role="img"
-          aria-label="Area chart of monthly total download snapshots"
-          data-testid="chart"
-          onMouseLeave={() => setHoverIndex(null)}
-          onMouseMove={(event) => {
-            const rect = event.currentTarget.getBoundingClientRect()
-            const xPx = event.clientX - rect.left
-            const x = (xPx / rect.width) * width
-            const nextIndex = Math.round((x - margin.left) / prepared.step)
-            setHoverIndex(Math.max(0, Math.min(prepared.chartPoints.length - 1, nextIndex)))
-          }}
-        >
-          {prepared.ticks.map((tick) => {
-            const y = margin.top + (1 - tick / prepared.yMax) * plotHeight
-            return (
-              <g key={tick}>
-                <line x1={margin.left} x2={width - margin.right} y1={y} y2={y} stroke="#f2c6b9" />
-                <text x={margin.left - 12} y={y + 4} textAnchor="end" fontSize="12" className="fill-muted">
-                  {formatInt(tick)}
-                </text>
-              </g>
-            )
-          })}
-
-          <path d={prepared.areaPath} fill="rgba(244, 111, 82, 0.22)" />
-          <path
-            d={prepared.linePath}
-            fill="none"
-            stroke="var(--color-brand-strong)"
-            strokeWidth="3"
-            strokeLinecap="round"
-            strokeLinejoin="round"
+      <ChartContainer data-testid="chart" config={chartConfig} className="aspect-auto h-64 w-full sm:h-80">
+        <AreaChart data={points} margin={{ top: 8, right: 8, bottom: 0, left: 4 }} accessibilityLayer>
+          <defs>
+            <linearGradient id="snapshot-fill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="var(--color-total)" stopOpacity={0.4} />
+              <stop offset="100%" stopColor="var(--color-total)" stopOpacity={0.02} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid vertical={false} strokeDasharray="3 4" />
+          <XAxis
+            dataKey="period_end"
+            tickLine={false}
+            axisLine={false}
+            tickMargin={10}
+            minTickGap={28}
+            tickFormatter={tickLabel}
+            className="font-mono text-[11px]"
           />
-
-          {prepared.chartPoints.map((point, index) => (
-            <g key={point.periodEnd}>
-              <circle
-                cx={point.x}
-                cy={point.y}
-                r={hoverIndex === index ? 5 : 3}
-                fill="#fffdfb"
-                stroke="var(--color-brand-strong)"
-                strokeWidth="2"
+          <YAxis
+            width={52}
+            tickLine={false}
+            axisLine={false}
+            tickCount={5}
+            tickFormatter={(value: number) => formatCompact(value)}
+            className="font-mono text-[11px]"
+          />
+          <ChartTooltip
+            cursor={{ strokeDasharray: '3 3' }}
+            content={
+              <ChartTooltipContent
+                indicator="line"
+                labelFormatter={(_, payload) => formatDay(String(payload?.[0]?.payload?.period_end ?? ''))}
+                formatter={(value, _name, item) => {
+                  const point = item.payload as DownloadSnapshotPoint
+                  return (
+                    <div className="grid w-full gap-1">
+                      <div className="flex items-center justify-between gap-6">
+                        <span className="text-muted-foreground">Total</span>
+                        <span className="font-mono font-medium text-foreground tabular">{formatInt(Number(value))}</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-6 text-muted-foreground">
+                        <span>LanceDB</span>
+                        <span className="font-mono tabular">{formatCompact(point.lancedb)}</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-6 text-muted-foreground">
+                        <span>Lance</span>
+                        <span className="font-mono tabular">{formatCompact(point.lance)}</span>
+                      </div>
+                    </div>
+                  )
+                }}
               />
-              {index % prepared.labelEvery === 0 || index === prepared.chartPoints.length - 1 ? (
-                <text
-                  x={point.x}
-                  y={height - 34}
-                  textAnchor="end"
-                  fontSize="10"
-                  transform={`rotate(-45 ${point.x} ${height - 34})`}
-                  className="fill-muted"
-                >
-                  {formatAxisDay(point.periodEnd)}
-                </text>
-              ) : null}
-            </g>
-          ))}
+            }
+          />
+          <Area
+            dataKey="total"
+            type="monotone"
+            stroke="var(--color-total)"
+            strokeWidth={2.5}
+            fill="url(#snapshot-fill)"
+            animationDuration={600}
+            dot={{ r: 3, strokeWidth: 0, fill: 'var(--color-total)' }}
+            activeDot={{ r: 5, strokeWidth: 2, stroke: 'var(--card)' }}
+          />
+        </AreaChart>
+      </ChartContainer>
 
-          {hovered && (
-            <>
-              <line
-                x1={hovered.x}
-                x2={hovered.x}
-                y1={margin.top}
-                y2={baseline}
-                stroke="var(--color-brand-strong)"
-                strokeDasharray="4 5"
-              />
-              <circle cx={hovered.x} cy={hovered.y} r="5" fill="var(--color-brand-strong)" />
-            </>
-          )}
-        </svg>
-      </div>
       <ChartDataTable
         caption="Monthly download snapshots"
         columns={[
@@ -245,6 +204,6 @@ export function DownloadSnapshotChart({ points }: DownloadSnapshotChartProps) {
         ]}
         rows={points}
       />
-    </section>
+    </SectionPanel>
   )
 }
