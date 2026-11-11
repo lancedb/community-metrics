@@ -104,7 +104,7 @@ function ChangeBadge({ change }: { change: Change }) {
       <Badge
         variant="outline"
         className={cn(
-          'gap-0.5 border-transparent font-mono tabular',
+          'gap-0.5 border-transparent tabular',
           change.direction === 'up' && 'bg-up-soft text-up',
           change.direction === 'down' && 'bg-down-soft text-down',
           change.direction === 'flat' && 'bg-muted text-muted-foreground',
@@ -139,7 +139,7 @@ export function MetricCard({ metric, color, highlight = false }: MetricCardProps
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="font-semibold text-foreground">{title}</p>
-          <p className="truncate font-mono text-xs text-muted-foreground">{subtitleForMetric(metric)}</p>
+          <p className="truncate text-xs text-muted-foreground">{subtitleForMetric(metric)}</p>
         </div>
         {change && <ChangeBadge change={change} />}
       </div>

@@ -116,7 +116,7 @@ export function DownloadSnapshotChart({ points }: DownloadSnapshotChartProps) {
             {change !== null && (
               <span
                 className={cn(
-                  'font-mono text-sm tabular',
+                  ' text-sm tabular',
                   change >= 0 ? 'text-up' : 'text-down',
                 )}
               >
@@ -145,7 +145,7 @@ export function DownloadSnapshotChart({ points }: DownloadSnapshotChartProps) {
             tickMargin={10}
             minTickGap={28}
             tickFormatter={tickLabel}
-            className="font-mono text-[11px]"
+            className="text-[11px]"
           />
           <YAxis
             width={52}
@@ -153,7 +153,7 @@ export function DownloadSnapshotChart({ points }: DownloadSnapshotChartProps) {
             axisLine={false}
             tickCount={5}
             tickFormatter={(value: number) => formatCompact(value)}
-            className="font-mono text-[11px]"
+            className="text-[11px]"
           />
           <ChartTooltip
             cursor={{ strokeDasharray: '3 3' }}
@@ -167,15 +167,15 @@ export function DownloadSnapshotChart({ points }: DownloadSnapshotChartProps) {
                     <div className="grid w-full gap-1">
                       <div className="flex items-center justify-between gap-6">
                         <span className="text-muted-foreground">Total</span>
-                        <span className="font-mono font-medium text-foreground tabular">{formatInt(Number(value))}</span>
+                        <span className="font-medium text-foreground tabular">{formatInt(Number(value))}</span>
                       </div>
                       <div className="flex items-center justify-between gap-6 text-muted-foreground">
                         <span>LanceDB</span>
-                        <span className="font-mono tabular">{formatCompact(point.lancedb)}</span>
+                        <span className="tabular">{formatCompact(point.lancedb)}</span>
                       </div>
                       <div className="flex items-center justify-between gap-6 text-muted-foreground">
                         <span>Lance</span>
-                        <span className="font-mono tabular">{formatCompact(point.lance)}</span>
+                        <span className="tabular">{formatCompact(point.lance)}</span>
                       </div>
                     </div>
                   )

@@ -239,9 +239,7 @@ export default function App() {
               className="h-6 w-auto invert dark:invert-0"
             />
             <span className="hidden h-5 w-px bg-border sm:block" aria-hidden />
-            <span className="hidden font-mono text-xs uppercase tracking-widest text-muted-foreground sm:block">
-              DevRel
-            </span>
+            <span className="hidden text-sm font-medium text-muted-foreground sm:block">Community Metrics</span>
           </div>
           <div className="flex items-center gap-1">
             <ThemeToggle />
@@ -256,17 +254,13 @@ export default function App() {
       <main className="mx-auto w-full max-w-7xl px-4 pb-16 pt-8 sm:px-6 lg:px-8">
         <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
           <div className="min-w-0">
-            <p className="mb-2 inline-flex items-center gap-2 rounded-full border bg-card/60 px-3 py-1 font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
-              <span className="size-1.5 rounded-full bg-primary" aria-hidden />
-              Community metrics
-            </p>
             <h1 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">LanceDB Community Metrics</h1>
             <p className="mt-2 max-w-2xl text-sm text-muted-foreground sm:text-base">
               Downloads, usage and growth tracking for Lance format and LanceDB SDK adoption.
             </p>
           </div>
           {data && (
-            <p className="font-mono text-xs text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               Last refreshed: {formatDateTime(data.generated_at)}
             </p>
           )}
@@ -369,7 +363,7 @@ export default function App() {
       </main>
 
       <footer className="border-t">
-        <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center justify-between gap-2 px-4 py-6 font-mono text-[11px] text-muted-foreground sm:px-6 lg:px-8">
+        <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center justify-between gap-2 px-4 py-6 text-[11px] text-muted-foreground sm:px-6 lg:px-8">
           <span>Sources: PyPI, npm, crates.io, GitHub, DuckDB, Hacker News</span>
           <span className="inline-flex items-center gap-1.5">
             <TrendingUpIcon aria-hidden className="size-3" />

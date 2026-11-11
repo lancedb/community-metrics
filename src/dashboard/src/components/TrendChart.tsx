@@ -69,7 +69,7 @@ export function TrendChart({ points, label, granularity, color = 'var(--chart-1)
             tickMargin={8}
             minTickGap={24}
             tickFormatter={tickLabel}
-            className="font-mono text-[10px]"
+            className="text-[10px]"
           />
           <YAxis
             width={48}
@@ -79,7 +79,7 @@ export function TrendChart({ points, label, granularity, color = 'var(--chart-1)
             allowDecimals={false}
             domain={granularity === 'day' ? ['dataMin', 'dataMax'] : [0, 'auto']}
             tickFormatter={yTick}
-            className="font-mono text-[10px]"
+            className="text-[10px]"
           />
           <ChartTooltip
             cursor={{ strokeDasharray: '3 3' }}
@@ -90,7 +90,7 @@ export function TrendChart({ points, label, granularity, color = 'var(--chart-1)
                 formatter={(value) => (
                   <div className="flex w-full items-center justify-between gap-4">
                     <span className="text-muted-foreground">{seriesName}</span>
-                    <span className="font-mono font-medium text-foreground tabular">{formatInt(Number(value))}</span>
+                    <span className="font-medium text-foreground tabular">{formatInt(Number(value))}</span>
                   </div>
                 )}
               />

@@ -40,12 +40,12 @@ function TooltipBody({ point }: { point: DuckDBLanceExtensionDownloadPoint }) {
             <span className="size-2 rounded-[2px]" style={{ background: `var(--color-${series.key})` }} />
             {series.label}
           </span>
-          <span className="font-mono text-foreground tabular">{formatInt(point[series.key])}</span>
+          <span className="text-foreground tabular">{formatInt(point[series.key])}</span>
         </div>
       ))}
       <div className="flex items-center justify-between gap-6 border-t pt-1.5">
         <span className="text-muted-foreground">Total</span>
-        <span className="font-mono font-medium text-foreground tabular">{formatInt(point.total_downloads)}</span>
+        <span className="font-medium text-foreground tabular">{formatInt(point.total_downloads)}</span>
       </div>
     </div>
   )
@@ -77,7 +77,7 @@ export function DuckDBExtensionDownloadsWidget({ points }: DuckDBExtensionDownlo
             <div key={series.key} className="flex items-center gap-2">
               <span className="size-2.5 rounded-[3px]" style={{ background: chartConfig[series.key].color }} />
               <span className="text-muted-foreground">{series.label}</span>
-              <span className="font-mono font-medium text-foreground tabular">{formatCompact(latest[series.key])}</span>
+              <span className="font-medium text-foreground tabular">{formatCompact(latest[series.key])}</span>
             </div>
           ))}
         </div>
@@ -98,7 +98,7 @@ export function DuckDBExtensionDownloadsWidget({ points }: DuckDBExtensionDownlo
               tickMargin={10}
               minTickGap={8}
               tickFormatter={formatMonthTick}
-              className="font-mono text-[11px]"
+              className="text-[11px]"
             />
             <YAxis
               width={44}
@@ -106,7 +106,7 @@ export function DuckDBExtensionDownloadsWidget({ points }: DuckDBExtensionDownlo
               axisLine={false}
               tickCount={5}
               tickFormatter={(value: number) => formatCompact(value)}
-              className="font-mono text-[11px]"
+              className="text-[11px]"
             />
             <ChartTooltip
               cursor={{ fill: 'var(--muted)', opacity: 0.5 }}

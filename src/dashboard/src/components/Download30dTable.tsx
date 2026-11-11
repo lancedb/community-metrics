@@ -58,7 +58,7 @@ function clampDate(value: Date, min: Date, max: Date): Date {
 const PRESETS = [7, 30, 90] as const
 
 const inputClass =
-  'block h-10 w-full rounded-lg border border-input bg-background/70 px-3 font-mono text-sm text-foreground tabular shadow-xs transition-colors focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none'
+  'block h-10 w-full rounded-lg border border-input bg-background/70 px-3 text-sm text-foreground tabular shadow-xs transition-colors focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none'
 
 export function Download30dTable({ initialTotals, maxDaysBack = 90 }: Download30dTableProps) {
   const maxDate = useMemo(
@@ -150,7 +150,7 @@ export function Download30dTable({ initialTotals, maxDaysBack = 90 }: Download30
                   aria-pressed={active}
                   onClick={() => applyPreset(days)}
                   className={cn(
-                    'rounded-md px-2.5 py-1 font-mono text-xs font-medium transition-colors',
+                    'rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
                     active ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground',
                   )}
                 >
@@ -242,7 +242,7 @@ export function Download30dTable({ initialTotals, maxDaysBack = 90 }: Download30
           <div className="h-full bg-chart-1 transition-[width] duration-500" style={{ width: `${lancedbShare}%` }} />
           <div className="h-full flex-1 bg-chart-2" />
         </div>
-        <div className="mt-2 flex justify-between font-mono text-xs text-muted-foreground tabular">
+        <div className="mt-2 flex justify-between text-xs text-muted-foreground tabular">
           <span>LanceDB {lancedbShare.toFixed(0)}%</span>
           <span>Lance {(100 - lancedbShare).toFixed(0)}%</span>
         </div>

@@ -48,13 +48,13 @@ export function DownloadMovers({ rollups }: DownloadMoversProps) {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="font-semibold text-foreground">{moverName(rollup.metric_id)}</p>
-                    <p className="mt-0.5 font-mono text-xs text-muted-foreground tabular">
+                    <p className="mt-0.5 text-xs text-muted-foreground tabular">
                       {formatInt(rollup.current_value)} downloads
                     </p>
                   </div>
                   <p
                     className={cn(
-                      'inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 font-mono text-sm font-semibold tabular',
+                      'inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-sm font-semibold tabular',
                       up ? 'bg-up-soft text-up' : 'bg-down-soft text-down',
                     )}
                   >

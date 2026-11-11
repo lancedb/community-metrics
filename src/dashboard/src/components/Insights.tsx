@@ -68,7 +68,7 @@ function RecentInsightsTable({ insights }: { insights: DashboardSignalGuidance[]
           <TableBody>
             {insights.map((insight) => (
               <TableRow key={insight.guidance_id}>
-                <TableCell className="font-mono text-xs text-muted-foreground">{formatDate(insight.generated_at)}</TableCell>
+                <TableCell className="text-xs text-muted-foreground">{formatDate(insight.generated_at)}</TableCell>
                 <TableCell className="text-xs font-medium">{humanize(insight.movement_assessment)}</TableCell>
                 <TableCell className="text-xs text-muted-foreground">{humanize(insight.engineering_relevance)}</TableCell>
                 <TableCell className="text-xs text-muted-foreground">{humanize(insight.confidence)}</TableCell>
@@ -107,7 +107,7 @@ function SignalCard({
         >
           {latest ? humanize(latest.movement_assessment) : 'Guidance pending'}
         </Badge>
-        <span className="font-mono text-xs text-muted-foreground">
+        <span className="text-xs text-muted-foreground">
           {signal.window_start} to {signal.window_end}
         </span>
       </div>
@@ -168,7 +168,7 @@ function SignalCard({
                   <span className="font-medium text-foreground group-hover:text-primary">{item.title}</span>
                   <ExternalLinkIcon aria-hidden className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
                 </span>
-                <span className="mt-0.5 block font-mono text-[11px] text-muted-foreground">
+                <span className="mt-0.5 block text-[11px] text-muted-foreground">
                   {item.source_name} · {formatDate(item.occurred_at)}
                 </span>
                 <span className="mt-1.5 line-clamp-2 block text-muted-foreground">{item.snippet}</span>
@@ -192,7 +192,7 @@ export function Insights({ signals, guidance, evidence }: InsightsProps) {
       icon={<SparklesIcon />}
       description="Weekly DevRel guidance generated from 7d signals, 15d/30d comparisons, and cited evidence."
       actions={
-        <Badge variant="outline" className="font-mono text-[11px] font-normal text-muted-foreground">
+        <Badge variant="outline" className="text-[11px] font-normal text-muted-foreground">
           {guidance.length > 0 ? `Guidance generated ${formatDate(guidance[0].generated_at)}` : 'Guidance pending'}
         </Badge>
       }
