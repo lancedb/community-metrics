@@ -12,12 +12,19 @@ def _context(name: str, default: str = "") -> str:
     return str(app.node.try_get_context(name) or default).strip()
 
 
+def _schedule_names(value: object) -> list[str]:
+    # A list in cdk.json, or a comma-separated string from `cdk deploy -c`.
+    if isinstance(value, str):
+        value = value.split(",")
+    return [str(v).strip() for v in value or [] if str(v).strip()]
+
+
 stack = JobsStack(
     app,
     "CommunityMetricsJobs",
     secret_name=_context("secretName", "community-metrics/prod"),
-    # Set in cdk.json. Off until the secret is filled in and a manual run succeeds.
-    schedules_enabled=_context("schedulesEnabled", "false").lower() == "true",
+    # Names from SCHEDULES that run, set in cdk.json. The rest are created DISABLED.
+    enabled_schedules=_schedule_names(app.node.try_get_context("enabledSchedules")),
     env=cdk.Environment(
         account=os.environ.get("CDK_DEFAULT_ACCOUNT"),
         # Same region as devrel-proxy, which the jobs use to reach LanceDB.

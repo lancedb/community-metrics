@@ -8,7 +8,7 @@ as one Lambda, on a schedule. The dashboard (Vercel) is not part of it.
 | --- | --- |
 | Lambda | Container image built from the repo root, arm64, 1024 MB, 15 min timeout, one run at a time, failed runs retried twice |
 | Secrets Manager secret | `community-metrics/prod`: JSON of env vars, filled in by hand. Kept if the stack is deleted |
-| EventBridge Scheduler | `daily` 11:00 UTC, `weekly-guidance` Mon 11:30 UTC, `monthly-duckdb` 1st 12:00 UTC. On/off via `schedulesEnabled` in `cdk.json` |
+| EventBridge Scheduler | `daily` 11:00 UTC, `weekly-guidance` Mon 11:30 UTC, `monthly-duckdb` 1st 12:00 UTC. Each is on only if listed in `enabledSchedules` in `cdk.json` (now only `daily`; `weekly-guidance` also needs `OPENAI_API_KEY` in the secret) |
 | CloudWatch Logs | 90-day retention |
 | Alarm + SNS topic `community-metrics-alerts` | Notifies the topic when any run fails |
 
@@ -47,7 +47,7 @@ bootstrap roles in us-east-2 (`cdk-hnb659fds-*-054483968661-us-east-2`).
 
      Never put these values in code, `cdk.json` or shell history.
    - Run the Lambda once by hand (console → Test, event `{"job": "daily"}`) and check the logs.
-4. Turn the schedules on with a PR that sets `"schedulesEnabled": true` in `cdk.json`.
+4. Turn schedules on with a PR that adds their names to `"enabledSchedules"` in `cdk.json`.
 
 ## Local checks
 

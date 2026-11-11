@@ -10,7 +10,7 @@ def _template(**overrides) -> Template:
     app = cdk.App()
     kwargs = {
         "secret_name": "community-metrics/test",
-        "schedules_enabled": True,
+        "enabled_schedules": list(SCHEDULES),
     } | overrides
     return Template.from_stack(JobsStack(app, "Test", **kwargs))
 
@@ -80,11 +80,29 @@ def test_schedules_send_the_handler_payloads(template):
         assert s["Properties"]["Target"]["RetryPolicy"]["MaximumRetryAttempts"] == 2
 
 
+def _states(template: Template) -> dict[str, str]:
+    return {
+        json.loads(s["Properties"]["Target"]["Input"])["job"]: s["Properties"]["State"]
+        for s in template.find_resources("AWS::Scheduler::Schedule").values()
+    }
+
+
 def test_schedules_can_be_created_disabled():
-    schedules = _template(schedules_enabled=False).find_resources(
-        "AWS::Scheduler::Schedule"
-    )
-    assert {s["Properties"]["State"] for s in schedules.values()} == {"DISABLED"}
+    assert set(_states(_template(enabled_schedules=[])).values()) == {"DISABLED"}
+
+
+def test_only_listed_schedules_are_enabled():
+    states = _states(_template(enabled_schedules=["daily"]))
+    assert states == {
+        "daily": "ENABLED",
+        "generate_signal_guidance": "DISABLED",
+        "update_duckdb_extension_downloads": "DISABLED",
+    }
+
+
+def test_unknown_schedule_name_is_rejected():
+    with pytest.raises(ValueError, match="unknown schedules"):
+        _template(enabled_schedules=["dialy"])
 
 
 def test_errors_alarm_notifies_topic_without_hardcoded_emails(template):
@@ -106,11 +124,12 @@ def _as_list(value):
     return value if isinstance(value, list) else [value]
 
 
-def test_cdk_json_keeps_schedules_off_by_default():
+def test_cdk_json_enables_daily_only():
     import json
     from pathlib import Path
 
     cdk_json = json.loads(
         (Path(__file__).resolve().parents[1] / "cdk.json").read_text()
     )
-    assert cdk_json["context"]["schedulesEnabled"] is False
+    # Weekly guidance and the monthly DuckDB job stay off for now.
+    assert cdk_json["context"]["enabledSchedules"] == ["daily"]
