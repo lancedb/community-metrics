@@ -225,6 +225,8 @@ src/dashboard/node_modules/
 src/dashboard/dist/
 src/dashboard/.next/
 src/dashboard/tsconfig.tsbuildinfo
+src/dashboard/test-results/
+src/dashboard/playwright-report/
 data/community_metrics.lancedb/
 # Keep Next.js dashboard server helpers tracked.
 !src/dashboard/src/lib/

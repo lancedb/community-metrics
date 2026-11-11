@@ -68,5 +68,6 @@ When making pipeline changes, preserve these behaviors:
 - `infra/` (CDK) holds the AWS resources for the scheduled jobs. Keep its `SCHEDULES` payloads valid for `lambda_handler.py`, and never put secret values in CDK code or context; the secret is filled in by hand.
 - Keep docs in sync when pipeline contracts change (`README.md`, `LOCAL.md`, `AGENTS.md` in the same PR).
 - Preserve API endpoints consumed by the frontend unless an explicit breaking change is intended and documented.
+- Keep the dashboard UI tests (`src/dashboard/tests`, `npm run test:ui`) passing. Every chart must keep a `data-testid="chart"` hover surface and a `ChartDataTable` listing exactly the points it plots; change the tests only when what the dashboard shows is meant to change.
 
 See the `README.md` file in this repo for up-to-date usage instructions.

@@ -179,6 +179,14 @@ http://127.0.0.1:3000/api/auth/callback/google
 
 Open `http://127.0.0.1:3000`.
 
+UI tests (no credentials needed; the dashboard API is mocked):
+
+```bash
+cd src/dashboard
+npx playwright install chromium   # once
+npm run test:ui
+```
+
 ## 6. Verify dashboard API route
 
 ```bash
