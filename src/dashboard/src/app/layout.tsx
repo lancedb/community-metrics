@@ -1,5 +1,4 @@
 import '@fontsource-variable/hanken-grotesk'
-import '@fontsource-variable/jetbrains-mono'
 import './globals.css'
 
 import type { Metadata, Viewport } from 'next'
@@ -28,7 +27,7 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body>
         {/* Dark by default (LanceDB brand); the header toggle switches and remembers. */}
-        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} disableTransitionOnChange>
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           <TooltipProvider delayDuration={150}>{children}</TooltipProvider>
         </ThemeProvider>
       </body>
