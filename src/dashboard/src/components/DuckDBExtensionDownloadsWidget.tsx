@@ -24,6 +24,9 @@ const SERIES = [
   { key: 'core_downloads', label: 'Core' },
 ] as const
 
+// Bars stack bottom-up in SERIES order, so the tooltip and legend list them top-down.
+const SERIES_TOP_DOWN = [...SERIES].reverse()
+
 function TooltipBody({ point }: { point: DuckDBLanceExtensionDownloadPoint }) {
   return (
     <div className="grid min-w-44 gap-1.5 rounded-lg border bg-popover px-3 py-2 text-xs shadow-xl">
@@ -31,7 +34,7 @@ function TooltipBody({ point }: { point: DuckDBLanceExtensionDownloadPoint }) {
         {formatMonth(point.month_start)}
         {point.is_partial_month && <span className="ml-1.5 text-muted-foreground">(partial)</span>}
       </p>
-      {SERIES.map((series) => (
+      {SERIES_TOP_DOWN.map((series) => (
         <div key={series.key} className="flex items-center justify-between gap-6">
           <span className="flex items-center gap-1.5 text-muted-foreground">
             <span className="size-2 rounded-[2px]" style={{ background: `var(--color-${series.key})` }} />
@@ -70,7 +73,7 @@ export function DuckDBExtensionDownloadsWidget({ points }: DuckDBExtensionDownlo
           </p>
         </div>
         <div className="flex items-center gap-5 text-sm" aria-label="Legend">
-          {SERIES.map((series) => (
+          {SERIES_TOP_DOWN.map((series) => (
             <div key={series.key} className="flex items-center gap-2">
               <span className="size-2.5 rounded-[3px]" style={{ background: chartConfig[series.key].color }} />
               <span className="text-muted-foreground">{series.label}</span>

@@ -260,8 +260,8 @@ test.describe('charts tab', () => {
 
     await expect(panel).toContainText(/this month/i)
     await expect(panel).toContainText(fmt(latest.total_downloads))
-    // Legend names both series (outside the hidden data table).
-    expect(await visibleText(panel)).toMatch(/Community[\s\S]*Core/)
+    // Legend names both series top-down, matching the stacked bars (outside the hidden data table).
+    expect(await visibleText(panel)).toMatch(/Core[\s\S]*Community/)
     expect(await chartTableRows(panel, 'DuckDB lance extension downloads by month')).toEqual(
       DUCKDB.map((point) => [
         point.month_label,
