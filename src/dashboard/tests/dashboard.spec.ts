@@ -133,6 +133,24 @@ test.describe('charts tab', () => {
     await expect(page.getByText(/Last refreshed/)).toBeVisible()
   })
 
+  test('page ends at the footer (hidden chart tables add no height)', async ({ page }) => {
+    // Production star history is ~2 years of daily points; a hidden table that long
+    // must not stretch the page.
+    const dashboard = dashboardFixture()
+    const start = Date.UTC(2024, 10, 10)
+    dashboard.total_stars_sparkline = Array.from({ length: 730 }, (_, day) => {
+      const date = new Date(start + day * 86_400_000).toISOString().slice(0, 10)
+      return { period_start: date, period_end: date, value: 10_000 + day * 12 }
+    })
+    await openDashboard(page, { dashboard })
+    await expect(section(page, 'Star Histories')).toBeVisible()
+    const { footerBottom, pageHeight } = await page.evaluate(() => ({
+      footerBottom: document.querySelector('footer')!.getBoundingClientRect().bottom + window.scrollY,
+      pageHeight: document.documentElement.scrollHeight,
+    }))
+    expect(pageHeight).toBeLessThanOrEqual(Math.ceil(footerBottom) + 1)
+  })
+
   test('sections appear in order', async ({ page }) => {
     await openDashboard(page)
     const titles = [
