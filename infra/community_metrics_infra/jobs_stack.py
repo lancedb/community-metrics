@@ -7,6 +7,7 @@ by hand (see infra/README.md).
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from pathlib import Path
 
 import aws_cdk.aws_cloudwatch as cloudwatch
@@ -47,10 +48,16 @@ class JobsStack(Stack):
         construct_id: str,
         *,
         secret_name: str,
-        schedules_enabled: bool = True,
+        enabled_schedules: Collection[str] = (),
         **kwargs,
     ) -> None:
         super().__init__(scope, construct_id, **kwargs)
+
+        unknown = set(enabled_schedules) - set(SCHEDULES)
+        if unknown:
+            raise ValueError(
+                f"unknown schedules in enabledSchedules: {sorted(unknown)}"
+            )
 
         # Placeholder value; paste the real JSON in by hand after the first deploy.
         # RETAIN so a stack delete never destroys the credentials.
@@ -108,7 +115,8 @@ class JobsStack(Stack):
                     retry_attempts=2,
                     max_event_age=Duration.hours(1),
                 ),
-                enabled=schedules_enabled,
+                # Every schedule is created; only the listed ones are ENABLED.
+                enabled=name in enabled_schedules,
             )
 
         # The handler raises when any step fails, so every failed run counts as an error.
