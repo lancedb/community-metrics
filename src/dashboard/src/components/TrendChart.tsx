@@ -1,68 +1,41 @@
-import { useMemo, useState } from 'react'
-import type { SparkPoint } from '../types'
+'use client'
+
+import { useId } from 'react'
+import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from 'recharts'
+
+import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart'
+import { formatCompact, formatDay, formatInt, formatMonth, formatMonthTick, formatShortDay } from '@/lib/format'
+import type { SparkPoint } from '@/types'
+
 import { ChartDataTable } from './ChartDataTable'
 
 type TrendChartProps = {
   points: SparkPoint[]
-  showMarkers?: boolean
   /** Names the chart's data table, e.g. "Python downloads by month". */
   label: string
+  /** Monthly points get month labels; daily points get day labels. */
+  granularity: 'month' | 'day'
+  /** A --chart-N color variable. */
+  color?: string
+  seriesName: string
 }
 
-type ChartPoint = {
-  x: number
-  y: number
-  value: number
-  periodEnd: string
-}
-
-function formatValue(value: number): string {
-  return Intl.NumberFormat('en-US').format(value)
-}
-
-function formatDay(input: string): string {
-  const date = new Date(`${input}T00:00:00Z`)
-  return date.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    timeZone: 'UTC',
-  })
-}
-
-export function TrendChart({ points, showMarkers = true, label }: TrendChartProps) {
-  const [hoverIndex, setHoverIndex] = useState<number | null>(null)
-
-  const width = 220
-  const height = 92
-  const margin = { top: 8, right: 16, bottom: 16, left: 2 }
-  const plotWidth = width - margin.left - margin.right
-  const plotHeight = height - margin.top - margin.bottom
-
-  const prepared = useMemo(() => {
-    if (points.length < 2) return null
-    const values = points.map((p) => p.value)
-    const min = Math.min(...values)
-    const max = Math.max(...values)
-    const spread = Math.max(1, max - min)
-    const step = plotWidth / (points.length - 1)
-
-    const chartPoints: ChartPoint[] = points.map((point, index) => {
-      const x = margin.left + index * step
-      const y = margin.top + (1 - (point.value - min) / spread) * plotHeight
-      return { x, y, value: point.value, periodEnd: point.period_end }
-    })
-
-    return {
-      min,
-      max,
-      chartPoints,
-      startLabel: formatDay(points[0].period_end),
-      endLabel: formatDay(points[points.length - 1].period_end),
-      line: chartPoints.map((p) => `${p.x},${p.y}`).join(' '),
-      step,
-    }
-  }, [points, plotHeight, plotWidth])
+export function TrendChart({ points, label, granularity, color = 'var(--chart-1)', seriesName }: TrendChartProps) {
+  const gradientId = `trend-${useId().replace(/:/g, '')}`
+  const config = { value: { label: seriesName, color } } satisfies ChartConfig
+  // Daily series spanning more than ~6 months cross a year, so "Dec 12" alone is ambiguous:
+  // label those by month and year ("Dec '25") instead.
+  const spanDays =
+    points.length > 1
+      ? (Date.parse(points[points.length - 1].period_end) - Date.parse(points[0].period_end)) / 86_400_000
+      : 0
+  const tickLabel = granularity === 'month' || spanDays > 183 ? formatMonthTick : formatShortDay
+  // Compact labels ("7.3K") collapse a narrow range like 7,270-7,279 into one repeated
+  // label, so use full numbers unless the series spans a wide range.
+  const values = points.map((point) => point.value)
+  const spread = values.length ? Math.max(...values) - Math.min(...values) : 0
+  const yTick = (value: number) => (spread < 5_000 ? formatInt(value) : formatCompact(value))
+  const tooltipLabel = granularity === 'month' ? formatMonth : formatDay
 
   const dataTable = (
     <ChartDataTable
@@ -75,75 +48,72 @@ export function TrendChart({ points, showMarkers = true, label }: TrendChartProp
     />
   )
 
-  if (!prepared) {
+  if (points.length < 2) {
     return (
-      <div className="space-y-2">
-        <div className="rounded-md bg-brand-soft p-3 text-[11px] text-muted">Need at least 2 points for trend</div>
+      <div className="flex h-36 items-center justify-center rounded-lg border border-dashed text-xs text-muted-foreground">
+        Not enough data for a trend yet
         {dataTable}
       </div>
     )
   }
 
-  const hovered = hoverIndex === null ? null : prepared.chartPoints[hoverIndex]
-  const stroke = 'var(--color-brand-strong)'
-
   return (
-    <div className="space-y-1">
-      <div className="flex items-center justify-between text-[11px] text-muted">
-        <span>min {formatValue(prepared.min)} · max {formatValue(prepared.max)}</span>
-        <span>
-          {hovered ? `${formatDay(hovered.periodEnd)} · ${formatValue(hovered.value)}` : 'Hover for value'}
-        </span>
-      </div>
-
-      <svg
-        className="h-20 w-full rounded-md bg-brand-soft/40"
-        viewBox={`0 0 ${width} ${height}`}
-        preserveAspectRatio="none"
-        onMouseLeave={() => setHoverIndex(null)}
-        onMouseMove={(event) => {
-          const rect = event.currentTarget.getBoundingClientRect()
-          const xPx = event.clientX - rect.left
-          const x = (xPx / rect.width) * width
-          const idx = Math.round((x - margin.left) / prepared.step)
-          const clamped = Math.max(0, Math.min(prepared.chartPoints.length - 1, idx))
-          setHoverIndex(clamped)
-        }}
-        aria-label="Interactive trend chart"
-        data-testid="chart"
-      >
-        <polyline
-          fill="none"
-          stroke={stroke}
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          points={prepared.line}
-        />
-        {showMarkers &&
-          prepared.chartPoints.map((point, index) => (
-            <circle
-              key={`${point.periodEnd}-${index}`}
-              cx={point.x}
-              cy={point.y}
-              r="2.25"
-              fill="#ffffff"
-              stroke={stroke}
-              strokeWidth="1.5"
-            />
-          ))}
-        {hovered && (
-          <>
-            <line x1={hovered.x} y1={margin.top} x2={hovered.x} y2={height - margin.bottom} stroke={stroke} strokeDasharray="2 3" />
-            <circle cx={hovered.x} cy={hovered.y} r="3.5" fill={stroke} />
-          </>
-        )}
-      </svg>
-
-      <div className="flex items-center justify-between text-[11px] text-muted">
-        <span>{prepared.startLabel}</span>
-        <span>{prepared.endLabel}</span>
-      </div>
+    <div>
+      <ChartContainer data-testid="chart" config={config} className="aspect-auto h-36 w-full">
+        <AreaChart data={points} margin={{ top: 6, right: 6, bottom: 0, left: 0 }} accessibilityLayer>
+          <defs>
+            <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="var(--color-value)" stopOpacity={0.35} />
+              <stop offset="100%" stopColor="var(--color-value)" stopOpacity={0.02} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid vertical={false} strokeDasharray="3 4" />
+          <XAxis
+            dataKey="period_end"
+            tickLine={false}
+            axisLine={false}
+            tickMargin={8}
+            minTickGap={24}
+            tickFormatter={tickLabel}
+            className="text-[10px]"
+          />
+          <YAxis
+            width={48}
+            tickLine={false}
+            axisLine={false}
+            tickCount={3}
+            allowDecimals={false}
+            domain={granularity === 'day' ? ['dataMin', 'dataMax'] : [0, 'auto']}
+            tickFormatter={yTick}
+            className="text-[10px]"
+          />
+          <ChartTooltip
+            cursor={{ strokeDasharray: '3 3' }}
+            content={
+              <ChartTooltipContent
+                indicator="line"
+                labelFormatter={(_, payload) => tooltipLabel(String(payload?.[0]?.payload?.period_end ?? ''))}
+                formatter={(value) => (
+                  <div className="flex w-full items-center justify-between gap-4">
+                    <span className="text-muted-foreground">{seriesName}</span>
+                    <span className="font-medium text-foreground tabular">{formatInt(Number(value))}</span>
+                  </div>
+                )}
+              />
+            }
+          />
+          <Area
+            dataKey="value"
+            type="monotone"
+            stroke="var(--color-value)"
+            strokeWidth={2}
+            fill={`url(#${gradientId})`}
+            animationDuration={500}
+            dot={granularity === 'month' ? { r: 2.5, strokeWidth: 0, fill: 'var(--color-value)' } : false}
+            activeDot={{ r: 4, strokeWidth: 2, stroke: 'var(--card)' }}
+          />
+        </AreaChart>
+      </ChartContainer>
       {dataTable}
     </div>
   )

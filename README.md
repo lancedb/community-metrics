@@ -177,6 +177,11 @@ The dashboard lives in `src/dashboard` and fetches:
 - `GET /api/v1/dashboard/daily?days=180`
 - Google SSO (restricted to `@lancedb.com` accounts)
 
+UI stack: Next.js, TypeScript, Tailwind CSS v4 and shadcn/ui, with charts built on the
+shadcn chart component (Recharts). The theme follows LanceDB's brand colors, is dark by
+default, and has a light/dark toggle in the header. Theme tokens live in
+`src/dashboard/src/app/globals.css`; shadcn components live in `src/dashboard/src/components/ui`.
+
 ### Local frontend dev
 
 ```bash

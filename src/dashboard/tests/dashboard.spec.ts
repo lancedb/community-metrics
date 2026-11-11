@@ -133,6 +133,39 @@ test.describe('charts tab', () => {
     await expect(page.getByText(/Last refreshed/)).toBeVisible()
   })
 
+  test('page ends at the footer (hidden chart tables add no height)', async ({ page }) => {
+    // Production star history is ~2 years of daily points; a hidden table that long
+    // must not stretch the page.
+    const dashboard = dashboardFixture()
+    const start = Date.UTC(2024, 10, 10)
+    dashboard.total_stars_sparkline = Array.from({ length: 730 }, (_, day) => {
+      const date = new Date(start + day * 86_400_000).toISOString().slice(0, 10)
+      return { period_start: date, period_end: date, value: 10_000 + day * 12 }
+    })
+    await openDashboard(page, { dashboard })
+    await expect(section(page, 'Star Histories')).toBeVisible()
+    const { footerBottom, pageHeight } = await page.evaluate(() => ({
+      footerBottom: document.querySelector('footer')!.getBoundingClientRect().bottom + window.scrollY,
+      pageHeight: document.documentElement.scrollHeight,
+    }))
+    expect(pageHeight).toBeLessThanOrEqual(Math.ceil(footerBottom) + 1)
+  })
+
+  test('long daily charts label the x-axis with the year', async ({ page }) => {
+    const dashboard = dashboardFixture()
+    const start = Date.UTC(2024, 10, 10)
+    dashboard.total_stars_sparkline = Array.from({ length: 730 }, (_, day) => {
+      const date = new Date(start + day * 86_400_000).toISOString().slice(0, 10)
+      return { period_start: date, period_end: date, value: 10_000 + day * 12 }
+    })
+    await openDashboard(page, { dashboard })
+    const card = section(page, 'Star Histories').locator('article', { hasText: 'Total Stars' })
+    const tickLabels = card.locator('[data-testid="chart"] .recharts-xAxis-tick-labels text')
+    await expect.poll(() => tickLabels.count()).toBeGreaterThan(1)
+    const ticks = await tickLabels.allTextContents()
+    for (const tick of ticks) expect(tick).toMatch(/^[A-Z][a-z]{2} '\d{2}$/)
+  })
+
   test('sections appear in order', async ({ page }) => {
     await openDashboard(page)
     const titles = [
@@ -260,8 +293,8 @@ test.describe('charts tab', () => {
 
     await expect(panel).toContainText(/this month/i)
     await expect(panel).toContainText(fmt(latest.total_downloads))
-    // Legend names both series (outside the hidden data table).
-    expect(await visibleText(panel)).toMatch(/Community[\s\S]*Core/)
+    // Legend names both series top-down, matching the stacked bars (outside the hidden data table).
+    expect(await visibleText(panel)).toMatch(/Core[\s\S]*Community/)
     expect(await chartTableRows(panel, 'DuckDB lance extension downloads by month')).toEqual(
       DUCKDB.map((point) => [
         point.month_label,

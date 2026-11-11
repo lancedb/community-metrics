@@ -1,19 +1,16 @@
-import type { DashboardMetricRollup } from '../types'
+import { ArrowDownRightIcon, ArrowUpRightIcon, TrendingUpIcon } from 'lucide-react'
+
+import { formatInt, formatPercent } from '@/lib/format'
+import { cn } from '@/lib/utils'
+import type { DashboardMetricRollup } from '@/types'
+
+import { SectionPanel } from './SectionPanel'
 
 type DownloadMoversProps = {
   rollups: DashboardMetricRollup[]
 }
 
-function formatInt(value: number): string {
-  return Intl.NumberFormat('en-US').format(value)
-}
-
-function formatPercent(value: number): string {
-  const sign = value > 0 ? '+' : ''
-  return `${sign}${value.toFixed(0)}%`
-}
-
-function metricName(metricId: string): string {
+export function moverName(metricId: string): string {
   const parts = metricId.split(':')
   if (parts.length < 3) return metricId
   const product = parts[1] === 'lancedb' ? 'LanceDB' : 'Lance'
@@ -21,7 +18,8 @@ function metricName(metricId: string): string {
   return `${product} ${sdk}`
 }
 
-function topRollups(rollups: DashboardMetricRollup[]) {
+/** The 6 largest 7d download moves by absolute percent change. */
+export function topMovers(rollups: DashboardMetricRollup[]): DashboardMetricRollup[] {
   return rollups
     .filter((rollup) => rollup.window === '7d' && rollup.metric_family === 'downloads')
     .sort((a, b) => Math.abs(b.percent_change) - Math.abs(a.percent_change))
@@ -29,32 +27,52 @@ function topRollups(rollups: DashboardMetricRollup[]) {
 }
 
 export function DownloadMovers({ rollups }: DownloadMoversProps) {
-  const movers = topRollups(rollups)
+  const movers = topMovers(rollups)
+  const maxMove = Math.max(1, ...movers.map((rollup) => Math.abs(rollup.percent_change)))
 
   return (
-    <section className="space-y-4 rounded-2xl border border-edge bg-white/90 p-5 backdrop-blur">
-      <header className="space-y-1 border-b border-edge pb-3">
-        <h2 className="text-2xl font-bold text-ink">7d Download Movers</h2>
-        <p className="text-sm text-muted">Largest 7d download shifts from the derived dashboard rollups.</p>
-      </header>
-
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {movers.length === 0 ? (
-          <p className="text-sm text-muted">No 7d rollups are available yet.</p>
-        ) : (
-          movers.map((rollup) => (
-            <div key={rollup.rollup_id} className="rounded-lg border border-edge bg-panel p-3">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold text-ink">{metricName(rollup.metric_id)}</p>
-                  <p className="text-xs text-muted">{formatInt(rollup.current_value)} downloads</p>
+    <SectionPanel
+      title="7d Download Movers"
+      icon={<TrendingUpIcon />}
+      description="Largest 7-day download changes versus the previous 7 days, from the derived dashboard rollups."
+    >
+      {movers.length === 0 ? (
+        <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">No 7d rollups are available yet.</p>
+      ) : (
+        <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {movers.map((rollup) => {
+            const up = rollup.percent_change >= 0
+            const Icon = up ? ArrowUpRightIcon : ArrowDownRightIcon
+            return (
+              <li key={rollup.rollup_id} className="rounded-xl border bg-background/60 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-foreground">{moverName(rollup.metric_id)}</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground tabular">
+                      {formatInt(rollup.current_value)} downloads
+                    </p>
+                  </div>
+                  <p
+                    className={cn(
+                      'inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-sm font-semibold tabular',
+                      up ? 'bg-up-soft text-up' : 'bg-down-soft text-down',
+                    )}
+                  >
+                    <Icon aria-hidden className="size-3.5" />
+                    {formatPercent(rollup.percent_change)}
+                  </p>
                 </div>
-                <p className="text-sm font-bold text-ink">{formatPercent(rollup.percent_change)}</p>
-              </div>
-            </div>
-          ))
-        )}
-      </div>
-    </section>
+                <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted" aria-hidden>
+                  <div
+                    className={cn('h-full rounded-full', up ? 'bg-up' : 'bg-down')}
+                    style={{ width: `${(Math.abs(rollup.percent_change) / maxMove) * 100}%` }}
+                  />
+                </div>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </SectionPanel>
   )
 }
