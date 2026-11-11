@@ -701,3 +701,90 @@ def test_update_daily_stars_uses_snapshot_for_single_day_with_lookback(
         (row["period_end"], row["value"]) for row in fake_store.upserted_stats_rows
     ] == [("2026-02-12", 321)]
     assert fake_store.history_rows[-1]["status"] == "success"
+
+
+def _stars_setup(monkeypatch, latest_existing: str, total: int = 500):
+    fake_store = _FakeStore(
+        {
+            "stars:lance:github": [
+                {"metric_id": "stars:lance:github", "period_end": latest_existing}
+            ]
+        }
+    )
+    monkeypatch.setattr(update_daily_stars, "build_store", lambda: fake_store)
+    monkeypatch.setattr(
+        update_daily_stars,
+        "STARS_METRIC_SOURCE_MAP",
+        {"stars:lance:github": "lance-format/lance"},
+    )
+    monkeypatch.setattr(
+        update_daily_stars, "latest_completed_day", lambda: date(2026, 2, 12)
+    )
+
+    class _GitHub:
+        def get_repo_stars(self, repo):
+            return total
+
+        def iter_stargazer_events(self, repo):
+            raise AssertionError("latest_day_only must never use the stargazer list")
+
+    monkeypatch.setattr(update_daily_stars, "GitHubClient", _GitHub)
+    return fake_store
+
+
+def test_latest_day_only_after_a_missed_day_writes_latest_and_succeeds(
+    monkeypatch, capsys
+) -> None:
+    # Latest saved day is Feb 10, so Feb 11 was missed.
+    fake_store = _stars_setup(monkeypatch, "2026-02-10")
+
+    result = update_daily_stars.run(lookback_days=1, latest_day_only=True)
+
+    assert result == {"inserted": 1, "updated": 0, "errors": 0}
+    assert [
+        (row["period_end"], row["value"]) for row in fake_store.upserted_stats_rows
+    ] == [("2026-02-12", 500)]
+    assert fake_store.history_rows[-1]["status"] == "success"
+    assert "not filling 2026-02-11..2026-02-11" in capsys.readouterr().out
+
+
+def test_latest_day_only_with_long_lookback_never_touches_past_days(
+    monkeypatch,
+) -> None:
+    fake_store = _stars_setup(monkeypatch, "2026-02-12")
+
+    result = update_daily_stars.run(lookback_days=30, latest_day_only=True)
+
+    assert result["errors"] == 0
+    assert [row["period_end"] for row in fake_store.upserted_stats_rows] == [
+        "2026-02-12"
+    ]
+
+
+def test_daily_refresh_runs_stars_latest_day_only_for_any_lookback(
+    monkeypatch,
+) -> None:
+    from community_metrics.jobs import daily_refresh
+
+    calls = {}
+    monkeypatch.setattr(
+        daily_refresh,
+        "run_downloads",
+        lambda **kw: (
+            calls.setdefault("downloads", kw)
+            and {"inserted": 0, "updated": 0, "errors": 0}
+        ),
+    )
+    monkeypatch.setattr(
+        daily_refresh,
+        "run_stars",
+        lambda **kw: (
+            calls.setdefault("stars", kw) and {"inserted": 0, "updated": 0, "errors": 0}
+        ),
+    )
+
+    for lookback in (1, 7, 45):
+        calls.clear()
+        daily_refresh.run(lookback_days=lookback)
+        assert calls["downloads"]["lookback_days"] == lookback
+        assert calls["stars"]["latest_day_only"] is True
