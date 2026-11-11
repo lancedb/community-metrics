@@ -662,3 +662,42 @@ def test_job_mains_exit_nonzero_on_errors(monkeypatch) -> None:
             module, "run", lambda **_: {"inserted": 1, "updated": 0, "errors": 0}
         )
         module.main()  # no exit on success
+
+
+def test_update_daily_stars_uses_snapshot_for_single_day_with_lookback(
+    monkeypatch,
+) -> None:
+    # daily_refresh passes --lookback-days 1, which targets only the latest day.
+    fake_store = _FakeStore(
+        {
+            "stars:lance:github": [
+                {"metric_id": "stars:lance:github", "period_end": "2026-02-11"}
+            ]
+        }
+    )
+    monkeypatch.setattr(update_daily_stars, "build_store", lambda: fake_store)
+    monkeypatch.setattr(
+        update_daily_stars,
+        "STARS_METRIC_SOURCE_MAP",
+        {"stars:lance:github": "lance-format/lance"},
+    )
+    monkeypatch.setattr(
+        update_daily_stars, "latest_completed_day", lambda: date(2026, 2, 12)
+    )
+
+    class _GitHub:
+        def get_repo_stars(self, repo):
+            return 321
+
+        def iter_stargazer_events(self, repo):
+            raise AssertionError("one target day must not need the stargazer list")
+
+    monkeypatch.setattr(update_daily_stars, "GitHubClient", _GitHub)
+
+    result = update_daily_stars.run(lookback_days=1)
+
+    assert result == {"inserted": 1, "updated": 0, "errors": 0}
+    assert [
+        (row["period_end"], row["value"]) for row in fake_store.upserted_stats_rows
+    ] == [("2026-02-12", 321)]
+    assert fake_store.history_rows[-1]["status"] == "success"

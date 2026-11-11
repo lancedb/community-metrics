@@ -56,7 +56,11 @@ def run(*, run_id: str | None = None, lookback_days: int = 0) -> dict[str, int]:
             if not target_days:
                 continue
 
-            if len(target_days) == 1 and lookback_days == 0:
+            # One day to fill (the normal daily run, including daily_refresh's
+            # --lookback-days 1): the current total is exact. The stargazer list is
+            # only needed to rebuild several past days, and GitHub only serves it to
+            # users with write access on the repo.
+            if len(target_days) == 1:
                 totals = {target_days[0]: github.get_repo_stars(repo)}
                 source_ref = f"github:{repo}"
             else:

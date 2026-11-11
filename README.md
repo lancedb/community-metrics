@@ -75,6 +75,7 @@ Daily row semantics in `stats`:
 Missing and pending data:
 - A day a registry omits is unavailable, not zero, and is not written.
 - npm returns an explicit `0` for days it hasn't finished counting. A `0` within the last 3 days is treated as unavailable, so the next run fetches that day again.
+- When only one day needs filling (the normal daily run, including `daily_refresh`'s `--lookback-days 1`), stars use the repo's current total. Rebuilding several past days uses the stargazer list, which GitHub only serves to users with write access on the repo.
 - If the stargazer backfill fails, the current star count is written for the latest day only; earlier days in the lookback window are left unchanged.
 - `update_daily_downloads`, `update_daily_stars` and `daily_refresh` exit with status 1 when any metric fails (the `history` row is `partial`), so schedulers see the failure.
 
