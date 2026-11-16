@@ -78,10 +78,26 @@ def test_instance_shape(template):
             ],
         },
     )
-    # IMDSv2 only, so the container (an extra network hop) cannot read the instance role.
     template.has_resource_properties(
         "AWS::EC2::LaunchTemplate",
         {"LaunchTemplateData": {"MetadataOptions": {"HttpTokens": "required"}}},
+    )
+
+
+def test_container_cannot_reach_instance_metadata(template):
+    # Regression (security audit 2026-11-16): the AL2023 AMI default hop limit of 2 let
+    # the dashboard container fetch the instance role's credentials. IMDSv2 plus hop
+    # limit 1 keeps the metadata service reachable from the host only.
+    template.has_resource_properties(
+        "AWS::EC2::LaunchTemplate",
+        {
+            "LaunchTemplateData": {
+                "MetadataOptions": {
+                    "HttpTokens": "required",
+                    "HttpPutResponseHopLimit": 1,
+                }
+            }
+        },
     )
 
 

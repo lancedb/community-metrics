@@ -67,7 +67,7 @@ npx aws-cdk synth        # build the template (no AWS changes, no Docker needed)
 
 | Resource | Details |
 | --- | --- |
-| EC2 instance | `t4g.micro` (2 vCPU, 1 GB, arm64), Amazon Linux 2023 pinned by `dashboardAmi` in `cdk.json`, 16 GB encrypted gp3, IMDSv2 only, 1 GB swap, security updates installed daily (`dnf-automatic`) |
+| EC2 instance | `t4g.micro` (2 vCPU, 1 GB, arm64), Amazon Linux 2023 pinned by `dashboardAmi` in `cdk.json`, 16 GB encrypted gp3, IMDSv2 only with hop limit 1 (the container cannot reach the instance role's credentials), 1 GB swap, security updates installed daily (`dnf-automatic`) |
 | Network | A public subnet in the account's default VPC (`dashboardVpcId` / `dashboardSubnetId` in `cdk.json`; us-east-2 is at its 5-VPC limit, so the stack creates no network). Its own security group has **no inbound rules**; Tailscale only makes outbound connections. No SSH: use Session Manager (console → EC2 → Connect → Session Manager) |
 | Dashboard container | Image built from `src/dashboard/Dockerfile`, published on `127.0.0.1:3000` only, `AUTH_MODE=tailscale`. Logs in CloudWatch (1-month retention) |
 | Tailscale | Joins as `community-metrics` and runs `tailscale serve` → `https://community-metrics.<tailnet>.ts.net`, tailnet only (no Funnel) |
