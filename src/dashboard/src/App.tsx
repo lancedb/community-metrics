@@ -205,7 +205,7 @@ function LoadingState() {
   )
 }
 
-export default function App() {
+export default function App({ showSignOut = true }: { showSignOut?: boolean }) {
   const [data, setData] = useState<DashboardResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<DashboardTab>('charts')
@@ -243,10 +243,12 @@ export default function App() {
           </div>
           <div className="flex items-center gap-1">
             <ThemeToggle />
-            <Button type="button" variant="ghost" size="sm" onClick={() => signOut({ callbackUrl: '/signin' })}>
-              <LogOutIcon aria-hidden className="hidden sm:block" />
-              Sign out
-            </Button>
+            {showSignOut && (
+              <Button type="button" variant="ghost" size="sm" onClick={() => signOut({ callbackUrl: '/signin' })}>
+                <LogOutIcon aria-hidden className="hidden sm:block" />
+                Sign out
+              </Button>
+            )}
           </div>
         </div>
       </header>

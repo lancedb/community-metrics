@@ -1,8 +1,14 @@
-# infra: scheduled jobs on AWS Lambda
+# infra: scheduled jobs on AWS Lambda, dashboard on the tailnet
 
-AWS CDK (Python) stack `CommunityMetricsJobs` in account `054483968661`, region `us-east-2`
-(same region as devrel-proxy). It runs the ingestion jobs from the repo-root `Dockerfile`
-as one Lambda, on a schedule. The dashboard (Vercel) is not part of it.
+AWS CDK (Python) app in account `054483968661`, region `us-east-2` (same region as
+devrel-proxy), with two stacks:
+
+- `CommunityMetricsJobs`: the ingestion jobs from the repo-root `Dockerfile` as one Lambda,
+  on a schedule.
+- `CommunityMetricsDashboard`: the dashboard on one EC2 instance, reachable only over the
+  LanceDB tailnet (see [Dashboard host](#dashboard-host) below).
+
+## Jobs
 
 | Resource | Details |
 | --- | --- |
@@ -14,10 +20,10 @@ as one Lambda, on a schedule. The dashboard (Vercel) is not part of it.
 
 ## How it deploys
 
-GitHub Actions (`.github/workflows/deploy-jobs.yml`) deploys on every merge to `main` that
-touches the job code, `Dockerfile`, `uv.lock`/`pyproject.toml` or `infra/`, and can be run by
-hand from the Actions tab. It runs the tests, builds the image on an arm64 runner, and runs
-`cdk deploy`. Nobody needs Docker locally.
+GitHub Actions (`.github/workflows/deploy.yml`) deploys on every merge to `main` that
+touches the job code, `Dockerfile`, `uv.lock`/`pyproject.toml`, `src/dashboard/` or `infra/`,
+and can be run by hand from the Actions tab. It runs the tests, builds both images on an
+arm64 runner, and runs `cdk deploy --all`. Nobody needs Docker locally.
 
 The workflow signs in to AWS with OIDC as `community-metrics-github-deploy`. That role can
 only be assumed by this repo's workflows on `refs/heads/main`, and it can only assume the CDK
@@ -56,3 +62,42 @@ cd infra
 uv run pytest            # stack tests
 npx aws-cdk synth        # build the template (no AWS changes, no Docker needed)
 ```
+
+## Dashboard host
+
+| Resource | Details |
+| --- | --- |
+| EC2 instance | `t4g.micro` (2 vCPU, 1 GB, arm64), Amazon Linux 2023 pinned by `dashboardAmi` in `cdk.json`, 16 GB encrypted gp3, IMDSv2 only, 1 GB swap, security updates installed daily (`dnf-automatic`) |
+| Network | Its own VPC with one public subnet and no NAT. The security group has **no inbound rules**; Tailscale only makes outbound connections. No SSH: use Session Manager (console → EC2 → Connect → Session Manager) |
+| Dashboard container | Image built from `src/dashboard/Dockerfile`, published on `127.0.0.1:3000` only, `AUTH_MODE=tailscale`. Logs in CloudWatch (1-month retention) |
+| Tailscale | Joins as `community-metrics` and runs `tailscale serve` → `https://community-metrics.<tailnet>.ts.net`, tailnet only (no Funnel) |
+| Secrets Manager secret | `community-metrics/tailscale-auth-key`: a Tailscale auth key, filled in by hand. Kept if the stack is deleted. The LanceDB settings come from `community-metrics/prod` (only the `LANCEDB_*` keys reach the container) |
+| SSM parameter | `/community-metrics/dashboard/image`: the image the host should run, set by each deploy |
+
+**How it updates:** `cdk deploy` pushes the new image and updates the SSM parameter. On the
+host, `dashboard-reconcile.timer` runs `/usr/local/bin/dashboard-reconcile`
+(`community_metrics_infra/dashboard_host/dashboard-reconcile.sh`) every 2 minutes: it joins
+the tailnet if needed and swaps the container when the parameter changes. GitHub never
+connects to the host.
+
+### One-time setup after the first deploy
+
+1. Create a Tailscale auth key (admin console → Settings → Keys → Generate auth key; one-off,
+   not reusable). Once the tailnet admins add a `tag:community-metrics` tag, use a key with
+   that tag so the host does not belong to a person.
+2. Paste it into the secret `community-metrics/tailscale-auth-key` (Secrets Manager console →
+   Retrieve secret value → Edit → Plaintext, the bare `tskey-auth-...` value). Never in code,
+   chat or shell history.
+3. Within ~2 minutes the host joins the tailnet. Open
+   `https://community-metrics.<tailnet>.ts.net`. If the tailnet requires device approval,
+   approve the new device in the admin console.
+
+### Operating it
+
+- Logs: CloudWatch log group from the stack (container output). Host script output:
+  Session Manager → `journalctl -u dashboard-reconcile`.
+- After rotating the LanceDB key in `community-metrics/prod`: Session Manager →
+  `sudo docker rm -f dashboard && sudo systemctl start dashboard-reconcile` (a missing
+  container is recreated with the current secret).
+- Changing `dashboardAmi` or the host's user data **replaces the instance**: put a fresh
+  auth key in the secret first, and remove the old device from the tailnet afterwards.

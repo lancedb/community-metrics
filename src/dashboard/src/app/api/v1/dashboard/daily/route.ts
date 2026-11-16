@@ -1,18 +1,14 @@
-import { getServerSession } from 'next-auth'
 import { NextRequest, NextResponse } from 'next/server'
 
-import { authOptions, isAllowedLanceDbEmail, isLocalAuthDisabled } from '@/lib/auth'
+import { isRequestAllowed } from '@/lib/auth'
 import { buildDashboardData, fetchDownloadTotalsForWindow } from '@/lib/dashboard-data'
 
 export const runtime = 'nodejs'
 
 export async function GET(request: NextRequest) {
   try {
-    if (!isLocalAuthDisabled()) {
-      const session = await getServerSession(authOptions)
-      if (!isAllowedLanceDbEmail(session?.user?.email)) {
-        return NextResponse.json({ detail: 'Unauthorized' }, { status: 401 })
-      }
+    if (!(await isRequestAllowed())) {
+      return NextResponse.json({ detail: 'Unauthorized' }, { status: 401 })
     }
 
     const responseMode = request.nextUrl.searchParams.get('response')

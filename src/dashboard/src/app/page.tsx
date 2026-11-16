@@ -1,18 +1,12 @@
 import { redirect } from 'next/navigation'
-import { getServerSession } from 'next-auth'
 
 import App from '@/App'
-import { authOptions, isAllowedLanceDbEmail, isLocalAuthDisabled } from '@/lib/auth'
+import { getAuthMode, isRequestAllowed } from '@/lib/auth'
 
 export default async function Page() {
-  if (isLocalAuthDisabled()) {
-    return <App />
-  }
-
-  const session = await getServerSession(authOptions)
-  if (!isAllowedLanceDbEmail(session?.user?.email)) {
+  if (!(await isRequestAllowed())) {
     redirect('/signin')
   }
 
-  return <App />
+  return <App showSignOut={getAuthMode() === 'google'} />
 }

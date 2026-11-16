@@ -1,9 +1,17 @@
 import type { NextAuthOptions } from 'next-auth'
+import { getServerSession } from 'next-auth'
 import GoogleProvider from 'next-auth/providers/google'
+import { headers } from 'next/headers'
 
-import { ALLOWED_EMAIL_DOMAIN, isAllowedLanceDbEmail, isLocalAuthDisabled } from './auth-policy'
+import {
+  ALLOWED_EMAIL_DOMAIN,
+  getAuthMode,
+  isAllowedLanceDbEmail,
+  isLocalAuthDisabled,
+  TAILSCALE_USER_LOGIN_HEADER,
+} from './auth-policy'
 
-export { ALLOWED_EMAIL_DOMAIN, isAllowedLanceDbEmail, isLocalAuthDisabled }
+export { ALLOWED_EMAIL_DOMAIN, getAuthMode, isAllowedLanceDbEmail, isLocalAuthDisabled }
 
 type GoogleProfile = {
   email?: string
@@ -41,4 +49,19 @@ export const authOptions: NextAuthOptions = {
       return emailVerified && hostedDomain === ALLOWED_EMAIL_DOMAIN && isAllowedLanceDbEmail(email)
     },
   },
+}
+
+/** True when the current request comes from an allowed @lancedb.com visitor. */
+export async function isRequestAllowed(): Promise<boolean> {
+  if (isLocalAuthDisabled()) {
+    return true
+  }
+
+  if (getAuthMode() === 'tailscale') {
+    const login = (await headers()).get(TAILSCALE_USER_LOGIN_HEADER)
+    return isAllowedLanceDbEmail(login)
+  }
+
+  const session = await getServerSession(authOptions)
+  return isAllowedLanceDbEmail(session?.user?.email)
 }

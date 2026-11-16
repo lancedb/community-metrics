@@ -6,6 +6,7 @@
   },
   "context": {
     "enabledSchedules": ["daily", "monthly-duckdb"],
+    "dashboardAmi": "ami-0984c50e3efa82711",
     "@aws-cdk/aws-lambda:recognizeLayerVersion": true,
     "@aws-cdk/core:target-partitions": ["aws"]
   }
