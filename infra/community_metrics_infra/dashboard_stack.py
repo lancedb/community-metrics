@@ -45,30 +45,40 @@ class DashboardStack(Stack):
         app_secret_name: str,
         tailscale_secret_name: str,
         ami_id: str,
+        vpc_id: str,
+        subnet_id: str,
+        availability_zone: str,
         tailscale_hostname: str = "community-metrics",
         instance_type: str = "t4g.micro",
         **kwargs,
     ) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
+        missing = [
+            name
+            for name, value in {
+                "dashboardVpcId": vpc_id,
+                "dashboardSubnetId": subnet_id,
+                "dashboardAvailabilityZone": availability_zone,
+            }.items()
+            if not value
+        ]
+        if missing:
+            raise ValueError(f"set {', '.join(missing)} in cdk.json")
         if not ami_id:
             raise ValueError(
                 "dashboardAmi must be set in cdk.json (an Amazon Linux 2023 arm64 AMI)"
             )
 
-        # Own small VPC: one public subnet for outbound traffic (Tailscale, ECR, AWS APIs),
-        # no NAT gateway. Inbound is closed by the security group below.
-        vpc = ec2.Vpc(
+        # An existing public subnet (the account's default VPC): the region is at its VPC
+        # limit, and the host only needs outbound traffic (Tailscale, ECR, AWS APIs).
+        # Inbound stays closed by the security group below.
+        vpc = ec2.Vpc.from_vpc_attributes(
             self,
             "Vpc",
-            ip_addresses=ec2.IpAddresses.cidr("10.60.0.0/24"),
-            max_azs=1,
-            nat_gateways=0,
-            subnet_configuration=[
-                ec2.SubnetConfiguration(
-                    name="public", subnet_type=ec2.SubnetType.PUBLIC, cidr_mask=26
-                )
-            ],
+            vpc_id=vpc_id,
+            availability_zones=[availability_zone],
+            public_subnet_ids=[subnet_id],
         )
 
         security_group = ec2.SecurityGroup(

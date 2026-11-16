@@ -7,6 +7,9 @@
   "context": {
     "enabledSchedules": ["daily", "monthly-duckdb"],
     "dashboardAmi": "ami-0984c50e3efa82711",
+    "dashboardVpcId": "vpc-04986a4caadb2bace",
+    "dashboardSubnetId": "subnet-0154737db8ed0d5d0",
+    "dashboardAvailabilityZone": "us-east-2a",
     "@aws-cdk/aws-lambda:recognizeLayerVersion": true,
     "@aws-cdk/core:target-partitions": ["aws"]
   }

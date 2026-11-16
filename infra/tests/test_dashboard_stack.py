@@ -15,6 +15,9 @@ def template() -> Template:
         app_secret_name="community-metrics/test",
         tailscale_secret_name="community-metrics/test-tailscale",
         ami_id="ami-0123456789abcdef0",
+        vpc_id="vpc-0123456789abcdef0",
+        subnet_id="subnet-0123456789abcdef0",
+        availability_zone="us-east-2a",
         env=cdk.Environment(account="111111111111", region="us-east-2"),
     )
     return Template.from_stack(stack)
@@ -39,6 +42,26 @@ def test_nothing_is_open_to_inbound_traffic(template):
         assert not sg["Properties"].get("SecurityGroupIngress")
     assert not template.find_resources("AWS::EC2::SecurityGroupIngress")
     assert not template.find_resources("AWS::EC2::NatGateway")
+
+
+def test_uses_the_given_subnet_and_creates_no_network(template):
+    # The region is at its VPC limit: the host must go into an existing public subnet.
+    for kind in ("AWS::EC2::VPC", "AWS::EC2::InternetGateway", "AWS::EC2::Subnet"):
+        assert not template.find_resources(kind)
+    template.has_resource_properties(
+        "AWS::EC2::Instance",
+        {
+            "AvailabilityZone": "us-east-2a",
+            "NetworkInterfaces": [
+                Match.object_like(
+                    {
+                        "SubnetId": "subnet-0123456789abcdef0",
+                        "AssociatePublicIpAddress": True,
+                    }
+                )
+            ],
+        },
+    )
 
 
 def test_instance_shape(template):
