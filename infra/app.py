@@ -47,6 +47,10 @@ dashboard = DashboardStack(
     # Pinned Amazon Linux 2023 arm64 AMI. Changing it replaces the instance (needs a new
     # Tailscale auth key); security updates install automatically in between.
     ami_id=_context("dashboardAmi"),
+    # A public subnet in an existing VPC (the default VPC); see dashboard_stack.py.
+    vpc_id=_context("dashboardVpcId"),
+    subnet_id=_context("dashboardSubnetId"),
+    availability_zone=_context("dashboardAvailabilityZone"),
     tailscale_hostname=_context("tailscaleHostname", "community-metrics"),
     env=env,
 )
