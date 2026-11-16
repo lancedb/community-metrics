@@ -170,7 +170,6 @@ class DashboardStack(Stack):
             # User data only runs on first boot, so a change must replace the instance.
             # A replacement needs a fresh Tailscale auth key (see infra/README.md).
             user_data_causes_replacement=True,
-            require_imdsv2=True,
             block_devices=[
                 ec2.BlockDevice(
                     device_name="/dev/xvda",
@@ -179,6 +178,23 @@ class DashboardStack(Stack):
                     ),
                 )
             ],
+        )
+
+        # Metadata service: IMDSv2 only, hop limit 1, so only processes on the host itself
+        # can reach it (and so the instance role). A container adds a network hop, so the
+        # dashboard container cannot get AWS credentials even if the app is compromised.
+        # The Amazon Linux 2023 AMI defaults to hop limit 2, which lets containers through.
+        metadata_options = ec2.LaunchTemplate(
+            self,
+            "HostMetadataOptions",
+            require_imdsv2=True,
+            http_put_response_hop_limit=1,
+        )
+        instance.instance.launch_template = (
+            ec2.CfnInstance.LaunchTemplateSpecificationProperty(
+                launch_template_id=metadata_options.launch_template_id,
+                version=metadata_options.latest_version_number,
+            )
         )
 
         CfnOutput(self, "InstanceId", value=instance.instance_id)
