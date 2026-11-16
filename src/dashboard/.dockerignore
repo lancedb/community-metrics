@@ -1,0 +1,10 @@
+# Keep local state and secrets out of the build context.
+node_modules
+.next
+.env
+.env.*
+test-results
+playwright-report
+tsconfig.tsbuildinfo
+Dockerfile
+.dockerignore

@@ -171,6 +171,9 @@ DISABLE_AUTH_LOCAL=1
 The bypass only works in Next.js development mode. Production deployments still require Google SSO.
 Restart `npm run dev` after changing `.env.local` because Next.js reads these values at server startup.
 
+To serve a production build over the tailnet with Tailscale identity instead of Google SSO,
+see "Tailnet deployment" in `README.md` (`AUTH_MODE=tailscale`).
+
 In Google Cloud Console, configure this OAuth callback URL:
 
 ```bash

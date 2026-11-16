@@ -7,6 +7,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  // The Docker image (Dockerfile) builds a self-contained server. Other builds
+  // (Vercel, CI tests, local dev) are unchanged.
+  output: process.env.NEXT_OUTPUT_STANDALONE === '1' ? 'standalone' : undefined,
   allowedDevOrigins: ['127.0.0.1', 'localhost'],
   outputFileTracingRoot: path.join(__dirname, '../..'),
   serverExternalPackages: ['@lancedb/lancedb'],

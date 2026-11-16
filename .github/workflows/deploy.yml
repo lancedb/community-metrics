@@ -1,7 +1,10 @@
-# Deploys the scheduled-jobs Lambda (infra/) on every merge to main that touches
-# the job code, the image or the stack. AWS access is via OIDC: the role below can
-# only be assumed by this workflow on lancedb/community-metrics refs/heads/main.
-name: Deploy jobs
+# Deploys both CDK stacks (infra/) on every merge to main that touches the job code,
+# the dashboard, the images or the stacks: the scheduled-jobs Lambda and the tailnet
+# dashboard host. The dashboard host picks up its new image by itself within ~2 minutes
+# (see infra/community_metrics_infra/dashboard_stack.py). AWS access is via OIDC: the
+# role below can only be assumed by this workflow on lancedb/community-metrics
+# refs/heads/main.
+name: Deploy
 
 on:
   push:
@@ -12,8 +15,10 @@ on:
       - pyproject.toml
       - uv.lock
       - src/community_metrics/**
+      - src/dashboard/**
+      - "!src/dashboard/tests/**"
       - infra/**
-      - .github/workflows/deploy-jobs.yml
+      - .github/workflows/deploy.yml
   workflow_dispatch:
 
 permissions:
@@ -21,7 +26,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: deploy-jobs
+  group: deploy
   cancel-in-progress: false
 
 env:
@@ -31,7 +36,7 @@ env:
 
 jobs:
   deploy:
-    # arm64 runner: the Lambda is arm64, so the image builds natively.
+    # arm64 runner: the Lambda and the dashboard host are arm64, so the images build natively.
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 30
     steps:
@@ -61,4 +66,4 @@ jobs:
 
       - name: Deploy
         working-directory: infra
-        run: npx --yes "aws-cdk@${CDK_CLI_VERSION}" deploy --require-approval never
+        run: npx --yes "aws-cdk@${CDK_CLI_VERSION}" deploy --all --require-approval never

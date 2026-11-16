@@ -250,6 +250,29 @@ NEXTAUTH_URL=https://<your-dashboard-domain>
 The route is read-only by code path and only queries bounded dashboard windows.
 If/when available, use a dedicated read-scoped key for Vercel.
 
+### Tailnet deployment (replacing Vercel)
+
+The dashboard also runs on a small EC2 instance that is reachable only over the LanceDB
+tailnet, at `https://community-metrics.<tailnet>.ts.net`. It is the `CommunityMetricsDashboard`
+stack in `infra/` and deploys with the jobs on every merge to `main`; see `infra/README.md`.
+
+That deployment sets `AUTH_MODE=tailscale`: there is no sign-in screen. `tailscale serve`
+passes each visitor's tailnet login in the `Tailscale-User-Login` header, and the app only
+allows `@lancedb.com` logins. The app trusts that header only because the container listens
+on `127.0.0.1` and `tailscale serve` is the only way in. Never set `AUTH_MODE=tailscale` on a
+deployment that can be reached any other way (such as Vercel). Without `AUTH_MODE`, Google
+SSO is used as before.
+
+To try it from your own laptop (needs Tailscale with HTTPS enabled on the tailnet):
+
+```bash
+cd src/dashboard
+npm run build
+AUTH_MODE=tailscale npx next start -H 127.0.0.1 -p 3000   # plus the LANCEDB_* env vars
+tailscale serve --bg 3000        # https://<your-device>.<tailnet>.ts.net, tailnet only
+tailscale serve --https=443 off  # stop serving
+```
+
 ### Frontend metric semantics
 
 - Download chart points are monthly totals.
