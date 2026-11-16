@@ -216,6 +216,11 @@ def _bootstrap_commands(settings: dict[str, str]) -> list[str]:
         "dnf config-manager --add-repo https://pkgs.tailscale.com/stable/amazon-linux/2023/tailscale.repo",
         "dnf install -y tailscale",
         "systemctl enable --now docker tailscaled",
+        # No SSH: admin access is through Session Manager. The security group already
+        # blocks port 22 from the internet, but the tailnet could reach it. Masked so a
+        # package update cannot turn it back on.
+        "systemctl disable --now sshd",
+        "systemctl mask sshd",
         "sed -i 's/^upgrade_type.*/upgrade_type = security/' /etc/dnf/automatic.conf",
         "systemctl enable --now dnf-automatic-install.timer",
         # 1 GB swap: the instance has 1 GB of memory.

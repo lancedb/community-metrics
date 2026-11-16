@@ -145,3 +145,17 @@ def test_user_data_installs_tailscale_and_never_holds_secret_values(template):
     assert "tskey-auth" not in user_data
     assert "LANCEDB_API_KEY=" not in user_data
     assert "--publish 127.0.0.1:3000:3000" in user_data
+
+
+def test_ssh_is_turned_off(template):
+    # Regression (security audit 2026-11-16): sshd listened on port 22 and anyone on the
+    # tailnet could reach it. Admin access is through Session Manager only.
+    user_data = _user_data(template)
+    assert "systemctl disable --now sshd" in user_data
+    assert "systemctl mask sshd" in user_data
+    # Never re-enabled later in the script.
+    assert "enable --now sshd" not in user_data
+    assert "start sshd" not in user_data
+    # And the stack never adds an SSH key pair.
+    (instance,) = template.find_resources("AWS::EC2::Instance").values()
+    assert "KeyName" not in instance["Properties"]
