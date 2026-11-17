@@ -69,6 +69,6 @@ When making pipeline changes, preserve these behaviors:
 - Keep docs in sync when pipeline contracts change (`README.md`, `LOCAL.md`, `AGENTS.md` in the same PR).
 - Preserve API endpoints consumed by the frontend unless an explicit breaking change is intended and documented.
 - The tailnet dashboard host (`infra/`, `CommunityMetricsDashboard`) must keep no inbound security-group rules, IMDSv2 with metadata hop limit 1 (so the container cannot reach the instance role), sshd disabled (Session Manager only), and publish the container on `127.0.0.1` only: `AUTH_MODE=tailscale` trusts the `Tailscale-User-Login` header, which is only safe when `tailscale serve` is the single way in. Never enable `AUTH_MODE=tailscale` on Vercel or any other publicly reachable deployment, and never put the Tailscale auth key in code or user data.
-- Keep the dashboard UI tests (`src/dashboard/tests`, `npm run test:ui`) passing. Every chart must keep a `data-testid="chart"` hover surface and a `ChartDataTable` listing exactly the points it plots; change the tests only when what the dashboard shows is meant to change.
+- Keep the dashboard UI tests (`src/dashboard/tests`, `npm run test:ui`, which includes the tailscale-mode auth tests) passing. Every chart must keep a `data-testid="chart"` hover surface and a `ChartDataTable` listing exactly the points it plots; change the tests only when what the dashboard shows is meant to change.
 
 See the `README.md` file in this repo for up-to-date usage instructions.

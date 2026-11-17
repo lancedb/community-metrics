@@ -190,6 +190,10 @@ npx playwright install chromium   # once
 npm run test:ui
 ```
 
+`test:ui` also runs the tailscale-mode auth tests (`tests/tailscale-auth.spec.ts`) against a
+second dev server started with `AUTH_MODE=tailscale`: who gets the dashboard, the data API
+refusing requests without an allowed tailnet login, and NextAuth's routes answering 404.
+
 ## 6. Verify dashboard API route
 
 ```bash
