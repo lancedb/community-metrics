@@ -3,13 +3,16 @@
 This project always reads/writes a remote LanceDB Enterprise cluster.
 
 Architecture split:
-- Write jobs run from a private machine (for example EC2 + cron).
+- Write jobs run on a schedule as an AWS Lambda in production (`infra/`). Locally you run them by hand.
 - Frontend runs as a Next.js app in `src/dashboard` and serves a read-only dashboard API route.
+  In production it runs on the tailnet host (`README.md`, "Deployment (tailnet)").
+
+Running a local job writes to the real production tables: the cluster is shared.
 
 ## 1. Install deps
 
 ```bash
-cd /Users/prrao/code/community-metrics
+cd community-metrics   # your clone
 uv sync --extra dev
 cd src/dashboard && npm install && cd ../..
 ```
@@ -149,7 +152,7 @@ This writes only `duckdb_lance_extension_downloads_monthly`; it does not modify
 ## 5. Run frontend locally
 
 ```bash
-cd /Users/prrao/code/community-metrics/src/dashboard
+cd src/dashboard
 npm run dev
 ```
 
