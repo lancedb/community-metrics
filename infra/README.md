@@ -70,7 +70,7 @@ npx aws-cdk synth        # build the template (no AWS changes, no Docker needed)
 | EC2 instance | `t4g.micro` (2 vCPU, 1 GB, arm64), Amazon Linux 2023 pinned by `dashboardAmi` in `cdk.json`, 16 GB encrypted gp3, IMDSv2 only with hop limit 1 (the container cannot reach the instance role's credentials), 1 GB swap, security updates installed daily (`dnf-automatic`) |
 | Network | A public subnet in the account's default VPC (`dashboardVpcId` / `dashboardSubnetId` in `cdk.json`; us-east-2 is at its 5-VPC limit, so the stack creates no network). Its own security group has **no inbound rules**; Tailscale only makes outbound connections. No SSH (sshd is disabled and masked, and there is no key pair): use Session Manager (console → EC2 → Connect → Session Manager) |
 | Dashboard container | Image built from `src/dashboard/Dockerfile`, published on `127.0.0.1:3000` only, `AUTH_MODE=tailscale`. Logs in CloudWatch (1-month retention) |
-| Tailscale | Joins as `community-metrics` and runs `tailscale serve` → `https://community-metrics.<tailnet>.ts.net`, tailnet only (no Funnel) |
+| Tailscale | Joins as `community-metrics` and runs `tailscale serve`, tailnet only (no Funnel). Now at https://community-metrics-1.taildd0df.ts.net (an older device held the plain name when it joined). Tagged `tag:community-metrics`, so it belongs to no person |
 | Secrets Manager secret | `community-metrics/tailscale-auth-key`: a Tailscale auth key, filled in by hand. Kept if the stack is deleted. The LanceDB settings come from `community-metrics/prod` (only the `LANCEDB_*` keys reach the container) |
 | SSM parameter | `/community-metrics/dashboard/image`: the image the host should run, set by each deploy |
 
@@ -82,15 +82,16 @@ connects to the host.
 
 ### One-time setup after the first deploy
 
-1. Create a Tailscale auth key (admin console → Settings → Keys → Generate auth key; one-off,
-   not reusable). Once the tailnet admins add a `tag:community-metrics` tag, use a key with
-   that tag so the host does not belong to a person.
+1. Create a Tailscale auth key tagged `tag:community-metrics` (admin console → Settings →
+   Keys → Generate auth key; one-off, pre-approved, with the tag). Only a tailnet admin, or
+   someone the admins made an owner of that tag, can create it.
 2. Paste it into the secret `community-metrics/tailscale-auth-key` (Secrets Manager console →
    Retrieve secret value → Edit → Plaintext, the bare `tskey-auth-...` value). Never in code,
    chat or shell history.
 3. Within ~2 minutes the host joins the tailnet. Open
-   `https://community-metrics.<tailnet>.ts.net`. If the tailnet requires device approval,
-   approve the new device in the admin console.
+   `https://community-metrics.<tailnet>.ts.net` (or the `-1`, `-2` name Tailscale gives it if
+   the plain name is taken). If the tailnet requires device approval, approve the new device
+   in the admin console.
 
 ### Operating it
 

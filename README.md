@@ -3,8 +3,14 @@
 This repository tracks community metrics for Lance and LanceDB, stores them in LanceDB Enterprise, and renders a read-only dashboard frontend.
 
 Architecture split:
-- **Write path**: Python ingestion jobs run on a private host (for example EC2 + cron).
-- **Read path**: Next.js dashboard app serves `/api/v1/dashboard/daily` and is deployed to Vercel.
+- **Write path**: Python ingestion jobs run on a schedule as one AWS Lambda (`CommunityMetricsJobs`).
+- **Read path**: the Next.js dashboard (`src/dashboard`) serves `/api/v1/dashboard/daily` from a
+  small EC2 instance reachable only over the LanceDB tailnet (`CommunityMetricsDashboard`).
+- Both are defined in [`infra/`](infra/README.md) and deploy on every merge to `main`.
+- Both reach the LanceDB Enterprise cluster through devrel-proxy (`LANCEDB_HOST_OVERRIDE`).
+
+Running it day to day (deploys, failed runs, backfills, rotating keys, rebuilding the host):
+see [RUNBOOK.md](RUNBOOK.md).
 
 ## What This Tracks
 
@@ -79,7 +85,7 @@ Missing and pending data:
 - If the stargazer backfill fails, the current star count is written for the latest day only; earlier days in the lookback window are left unchanged.
 - `update_daily_downloads`, `update_daily_stars` and `daily_refresh` exit with status 1 when any metric fails (the `history` row is `partial`), so schedulers see the failure.
 
-## Ingestion Jobs (EC2 / Private Host)
+## Ingestion Jobs
 
 All writes happen directly through `LanceDBStore`.
 No FastAPI/uvicorn runtime is required.
@@ -131,24 +137,12 @@ uv run python -m community_metrics.jobs.update_duckdb_extension_downloads
 This recomputes monthly rows from January 2026 through the current month, marks the
 current month as partial, and writes only `duckdb_lance_extension_downloads_monthly`.
 
-### Suggested Cron (EC2)
+### Production: AWS Lambda (container image)
 
-Run daily at **09:00 UTC**:
-
-```cron
-0 9 * * * cd /path/to/community-metrics && /usr/bin/env -S bash -lc 'uv run python -m community_metrics.jobs.daily_refresh >> /var/log/community-metrics/daily_refresh.log 2>&1'
-```
-
-Run monthly DuckDB extension refresh at **10:00 UTC** on the first day of each month:
-
-```cron
-0 10 1 * * cd /path/to/community-metrics && /usr/bin/env -S bash -lc 'uv run python -m community_metrics.jobs.update_duckdb_extension_downloads >> /var/log/community-metrics/update_duckdb_extension_downloads.log 2>&1'
-```
-
-### AWS Lambda (container image)
-
-The jobs can also run as a scheduled Lambda built from the repo's `Dockerfile`
-(Python 3.13, locked dependencies from `uv.lock`). The entry point is
+In production the jobs run as a scheduled Lambda built from the repo's `Dockerfile`
+(Python 3.13, locked dependencies from `uv.lock`). Schedules: `daily` at 11:00 UTC and
+`monthly-duckdb` on the 1st at 12:00 UTC (`weekly-guidance` exists but is off until
+`OPENAI_API_KEY` is in the secret); see [`infra/README.md`](infra/README.md). The entry point is
 `community_metrics.lambda_handler.handler`, which takes one event per run:
 
 | Event | Runs |
@@ -171,11 +165,14 @@ uv run python -m community_metrics.lambda_handler '{"job": "daily"}'
 The AWS resources (Lambda, secret, schedules, failure alerts) are defined as a CDK stack in
 [`infra/`](infra/README.md), which also has the deploy steps.
 
-## Frontend (Next.js + Vercel)
+## Frontend (Next.js)
 
 The dashboard lives in `src/dashboard` and fetches:
 - `GET /api/v1/dashboard/daily?days=180`
-- Google SSO (restricted to `@lancedb.com` accounts)
+
+Access is limited to `@lancedb.com` accounts: in production through the visitor's tailnet
+login (`AUTH_MODE=tailscale`, see [Deployment](#deployment-tailnet)); otherwise through Google
+SSO, which is still in the code for local use.
 
 The API route keeps each response in server memory for 5 minutes and reuses its LanceDB
 connection, so new data from the daily refresh can take up to 5 minutes to appear. The
@@ -194,7 +191,7 @@ npm install
 npm run dev
 ```
 
-Set these frontend env vars in `src/dashboard/.env.local` (local) or Vercel project settings (deployment):
+To run it locally with Google SSO, set these in `src/dashboard/.env.local` (plus the `LANCEDB_*` vars):
 
 ```bash
 GOOGLE_CLIENT_ID=...
@@ -209,7 +206,7 @@ For local dashboard testing only, Google auth can be bypassed:
 DISABLE_AUTH_LOCAL=1
 ```
 
-This flag is only honored when Next.js runs with `NODE_ENV=development`; production builds still require Google SSO.
+This flag is only honored when Next.js runs with `NODE_ENV=development`; production builds always check access.
 Restart `npm run dev` after changing `.env.local` because Next.js reads these values at server startup.
 
 Google OAuth app setup must include this callback URI:
@@ -233,35 +230,22 @@ npm run test:ui                   # desktop + mobile viewports
 npm run typecheck
 ```
 
-### Vercel env vars
+### Deployment (tailnet)
 
-Set these in the Vercel project:
+The dashboard runs on a small EC2 instance that is reachable only over the LanceDB tailnet,
+at https://community-metrics-1.taildd0df.ts.net. It is the `CommunityMetricsDashboard` stack in
+`infra/` and deploys with the jobs on every merge to `main`; see `infra/README.md`. It reads the
+`LANCEDB_*` settings from the same Secrets Manager secret as the jobs. The API route is
+read-only by code path and only queries bounded dashboard windows.
 
-```bash
-LANCEDB_API_KEY=...
-LANCEDB_HOST_OVERRIDE=https://<your-enterprise-host>
-LANCEDB_REGION=us-east-1
-GOOGLE_CLIENT_ID=...
-GOOGLE_CLIENT_SECRET=...
-NEXTAUTH_SECRET=...
-NEXTAUTH_URL=https://<your-dashboard-domain>
-```
+The old Vercel deployment (Google SSO) is retired; the tailnet host replaces it.
 
-The route is read-only by code path and only queries bounded dashboard windows.
-If/when available, use a dedicated read-scoped key for Vercel.
-
-### Tailnet deployment (replacing Vercel)
-
-The dashboard also runs on a small EC2 instance that is reachable only over the LanceDB
-tailnet, at `https://community-metrics.<tailnet>.ts.net`. It is the `CommunityMetricsDashboard`
-stack in `infra/` and deploys with the jobs on every merge to `main`; see `infra/README.md`.
-
-That deployment sets `AUTH_MODE=tailscale`: there is no sign-in screen. `tailscale serve`
+The tailnet host sets `AUTH_MODE=tailscale`: there is no sign-in screen. `tailscale serve`
 passes each visitor's tailnet login in the `Tailscale-User-Login` header, and the app only
 allows `@lancedb.com` logins. The app trusts that header only because the container listens
 on `127.0.0.1` and `tailscale serve` is the only way in. Never set `AUTH_MODE=tailscale` on a
-deployment that can be reached any other way (such as Vercel). Without `AUTH_MODE`, Google
-SSO is used as before.
+deployment that can be reached any other way (such as a public host). Without `AUTH_MODE`,
+Google SSO is used.
 
 To try it from your own laptop (needs Tailscale with HTTPS enabled on the tailnet):
 

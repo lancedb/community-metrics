@@ -357,8 +357,8 @@ slides.append(f'''  <section class="slide slide-content">
   </section>''')
 
 # 08 — CLOSING / CTA TO DASHBOARD
-DASHBOARD_URL = "https://community-metrics-alpha.vercel.app/"
-DASHBOARD_LABEL = "community-metrics-alpha.vercel.app"
+DASHBOARD_URL = "https://community-metrics-1.taildd0df.ts.net/"
+DASHBOARD_LABEL = "community-metrics-1.taildd0df.ts.net (LanceDB tailnet)"
 slides.append(f'''  <section class="slide slide-closing">
 {chrome(8)}{notes(f"""
 ## Close
