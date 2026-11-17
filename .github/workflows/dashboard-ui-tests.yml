@@ -59,4 +59,6 @@ jobs:
           path: |
             src/dashboard/playwright-report/
             src/dashboard/test-results/
+            src/dashboard/playwright-report-tailscale/
+            src/dashboard/test-results-tailscale/
           retention-days: 14

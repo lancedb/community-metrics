@@ -6,6 +6,8 @@ const PORT = 3100
 // browser (tests/fixtures/dashboard.ts), so no LanceDB or Google credentials are needed.
 export default defineConfig({
   testDir: './tests',
+  // Runs separately with its own server (playwright.tailscale.config.ts).
+  testIgnore: /tailscale-auth/,
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
