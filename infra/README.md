@@ -23,7 +23,10 @@ devrel-proxy), with two stacks:
 GitHub Actions (`.github/workflows/deploy.yml`) deploys on every merge to `main` that
 touches the job code, `Dockerfile`, `uv.lock`/`pyproject.toml`, `src/dashboard/` or `infra/`,
 and can be run by hand from the Actions tab. It runs the tests, builds both images on an
-arm64 runner, and runs `cdk deploy --all`. Nobody needs Docker locally.
+arm64 runner, and runs `cdk deploy --all`. Nobody needs Docker locally. A second job then
+records the deploy under the repo's **Deployments** (`Production`) with a link to the
+dashboard (`DASHBOARD_URL` in the workflow; change it there if the host's tailnet name
+changes).
 
 The workflow signs in to AWS with OIDC as `community-metrics-github-deploy`. That role can
 only be assumed by this repo's workflows on `refs/heads/main`, and it can only assume the CDK
