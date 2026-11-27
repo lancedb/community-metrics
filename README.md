@@ -1,5 +1,16 @@
 # Community Metrics Dashboard
 
+> [!IMPORTANT]
+> **Retired on 2026-11-27.** Community metrics are now part of
+> [lance-overwatch](https://github.com/lancedb/lance-overwatch): a daily GitHub Actions job
+> collects the same downloads, stars and DuckDB numbers, and its Adoption page
+> (https://lance-overwatch.taildd0df.ts.net/#/adoption, LanceDB tailnet only) shows them with
+> the Insights tab. The full table history was imported there first.
+>
+> The AWS stacks (`CommunityMetricsJobs`, `CommunityMetricsDashboard`), the dashboard host, the
+> LanceDB tables and the secrets are deleted, and the `Deploy` workflow is removed so a merge
+> can't recreate them. The code is kept for reference.
+
 This repository tracks community metrics for Lance and LanceDB, stores them in LanceDB Enterprise, and renders a read-only dashboard frontend.
 
 Architecture split:
